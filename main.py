@@ -3,7 +3,7 @@
 通过标签搜索插画并发送图片，支持 Lolicon 主源、Pixiv 回退、内容安全过滤、去重和自然语言自动触发。
 
 搜索指令：
-    /p [标签] [数量]           搜索并发送图片
+    /px [标签] [数量]           搜索并发送图片
 
 自动触发（需在配置中开启）：
     来一份图                   发送 1 张随机图片
@@ -40,7 +40,7 @@ from .pixiv.lolicon import LoliconClient
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v1.0.0"
+PLUGIN_VERSION = "v1.1.0"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
 
@@ -189,8 +189,8 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
     # 指令：搜索（主指令）
     # ──────────────────────────────────────────────────────────────
 
-    @filter.command("p")
-    async def cmd_p(self, event: AstrMessageEvent, query: GreedyStr = GreedyStr):
+    @filter.command("px")
+    async def cmd_px(self, event: AstrMessageEvent, query: GreedyStr = GreedyStr):
         """搜索并发送图片。参数: [标签] [数量]"""
         if not self._ensure_client_or_error(event):
             yield event.plain_result(
