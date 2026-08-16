@@ -1,0 +1,112 @@
+{
+  "pixiv_refresh_token": {
+    "description": "Pixiv refresh_token",
+    "type": "string",
+    "default": "",
+    "hint": "可选。Lolicon 主源失败时用于 Pixiv 搜索或推荐作品回退；留空不影响 Lolicon 发图。"
+  },
+  "lolicon_api_url": {
+    "description": "Lolicon API 地址",
+    "type": "string",
+    "default": "https://api.lolicon.app/setu/v2",
+    "hint": "首选图片源地址。留空会停用 Lolicon，仅在配置 refresh_token 时使用 Pixiv 回退。"
+  },
+  "lolicon_exclude_ai": {
+    "description": "Lolicon 排除 AI 作品",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后向 Lolicon API 传递 excludeAI=true。"
+  },
+  "allow_r18": {
+    "description": "允许 R18 内容",
+    "type": "bool",
+    "default": false,
+    "hint": "默认关闭，仅发送全年龄（普通分级）作品；开启后允许发送 R18 作品。"
+  },
+  "safety_filter_enabled": {
+    "description": "启用安全词过滤",
+    "type": "bool",
+    "default": true,
+    "hint": "默认开启，检查内置及自定义安全词（如 r18、裸体、血腥等），命中后拒绝搜索词并过滤作品；关闭后跳过安全词检查。作品黑名单和 R18 分级限制不受此开关影响，仍由对应配置独立控制。"
+  },
+  "lolicon_image_proxy_origins": {
+    "description": "Lolicon 图片反代地址",
+    "type": "text",
+    "default": "",
+    "obvious_hint": true,
+    "hint": "可选，每行填写一个完整的 http(s) origin，最多使用 5 个并按顺序尝试；拒绝账号密码、路径、query 和 fragment，重复项自动删除。仅改写 Lolicon 来源且位于允许列表中的 Pixiv 图片主机，不代理 API、Pixiv 登录或其他网络请求。全部失败后回退 Lolicon 返回地址；留空表示不改写，保存并重载插件后生效。"
+  },
+  "filter_manga": {
+    "description": "过滤漫画",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后过滤 Pixiv 回退结果中的 manga；Lolicon 返回项按插画处理。"
+  },
+  "max_count": {
+    "description": "单次最大发送数量",
+    "type": "int",
+    "default": 5,
+    "slider": {"min": 1, "max": 20, "step": 1},
+    "hint": "用户单次指令最多发送几张图。"
+  },
+  "dedupe_days": {
+    "description": "图片去重天数",
+    "type": "int",
+    "default": 1,
+    "slider": {"min": 0, "max": 7, "step": 1},
+    "hint": "按北京时间自然日去重。0=关闭并清空去重记录，1=仅当天，2-7=最近对应天数。同群成员共享；不同群、私聊用户、标签和图片源相互隔离。缩短天数会在插件重载时清理超期记录，增加天数无法恢复已清理历史。"
+  },
+  "dedupe_ttl_hours": {
+    "description": "旧版去重配置（迁移用）",
+    "type": "float",
+    "default": 24.0,
+    "invisible": true
+  },
+  "dedupe_days_migrated": {
+    "description": "去重配置迁移标记",
+    "type": "bool",
+    "default": false,
+    "invisible": true
+  },
+  "request_timeout": {
+    "description": "下载超时（秒）",
+    "type": "float",
+    "default": 30.0,
+    "slider": {"min": 5, "max": 120, "step": 5},
+    "hint": "单张图片下载的最大等待时间。"
+  },
+  "image_quality": {
+    "description": "图片质量",
+    "type": "string",
+    "default": "original",
+    "options": ["original", "large", "medium"],
+    "hint": "original=原图（最大，下载慢）, large=大图（推荐）, medium=中图（最小，下载快）。若原图超过自动降级阈值会降级到更低质量，指定质量不可用也会自动降级。"
+  },
+  "auto_downgrade_original_mb": {
+    "description": "原图自动降级阈值（MiB）",
+    "type": "float",
+    "default": 3.0,
+    "slider": {"min": 0, "max": 100, "step": 0.5},
+    "hint": "当实际下载到的原图超过该大小时，自动改用 large/medium 等低质量图片。设为 0 可禁用自动降级。"
+  },
+  "forward_threshold": {
+    "description": "合并转发阈值",
+    "type": "int",
+    "default": 1,
+    "slider": {"min": 0, "max": 20, "step": 1},
+    "hint": "成功下载的图片数量严格大于此值时以合并转发发送。设为 0 时始终合并转发；设为 1 时超过 1 张才合并转发。仅 aiocqhttp 平台支持合并转发，其他平台会自动逐条发送。"
+  },
+  "auto_trigger_enabled": {
+    "description": "自然语言自动触发",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，群内发送包含「来份/张图」等自然语言时自动触发发图。无需命令前缀。"
+  },
+  "rate_limit_seconds": {
+    "description": "请求频率限制（秒）",
+    "type": "int",
+    "default": 3,
+    "slider": {"min": 0, "max": 60, "step": 1},
+    "hint": "同一用户两次请求的最小间隔，设为 0 禁用。防止刷屏。"
+  }
+}

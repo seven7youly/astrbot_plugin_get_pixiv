@@ -1,0 +1,1 @@
+"""AstrBot Pixiv illustration plugin."""
