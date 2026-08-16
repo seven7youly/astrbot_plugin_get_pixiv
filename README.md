@@ -1,10 +1,10 @@
 # 星绘漫游
 
-AstrBot 安全发图插件（精简自原项目，仅保留获取图片功能，已移除签到）。
+AstrBot 安全发图插件。本插件精简自 [astrbot_plugin_get_px](https://github.com/shitianyaa/astrbot_plugin_get_px)，仅保留获取图片功能，已移除签到功能。
 
 - 首选图片源：[Lolicon API](https://api.lolicon.app/)，无需 Token
 - 可选回退：Pixiv（需 `pixiv_refresh_token`）
-- 内容安全：默认仅普通分级（`allow_r18` 可配置允许 R18）、内置安全词过滤可开关（`safety_filter_enabled`），支持自定义反代地址
+- 内容安全：默认仅普通分级（`allow_r18` 可配置允许 R18）；内置安全词（r18、裸体、血腥等）逐词单独开关，在插件配置中以开关按钮形式管理，默认全部开启
 - 稳定性：0–7 天自然日去重、发送失败重试、临时文件自动清理
 
 ## 安装

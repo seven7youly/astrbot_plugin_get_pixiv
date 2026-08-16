@@ -8,9 +8,11 @@ from astrbot.api.event import AstrMessageEvent
 
 from .index import ordered_by_unused
 from .safety import (
+    BUILTIN_SAFETY_TERMS,
     illustration_texts,
     match_safety_term,
-    normalized_builtin_terms,
+    normalize_safety_text,
+    safety_term_config_key,
 )
 
 
@@ -30,13 +32,17 @@ class FiltersMixin:
             if tag.strip()
         ]
 
-    def _safety_filter_enabled(self) -> bool:
-        return self._cfg_bool("safety_filter_enabled", True)
+    def _enabled_builtin_safety_terms(self) -> set[str]:
+        enabled: set[str] = set()
+        for term in BUILTIN_SAFETY_TERMS:
+            if self._cfg_bool(safety_term_config_key(term), True):
+                normalized = normalize_safety_text(term)
+                if normalized:
+                    enabled.add(normalized)
+        return enabled
 
     async def _safety_terms(self) -> set[str]:
-        if not self._safety_filter_enabled():
-            return set()
-        terms = set(normalized_builtin_terms())
+        terms = self._enabled_builtin_safety_terms()
         if self.image_index is None:
             return terms
         try:

@@ -433,7 +433,7 @@ class SearchMixin:
                                     try:
                                         await event.send(
                                             event.plain_result(
-                                                f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过"
+                                                f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{illust_id}"
                                             )
                                         )
                                     except Exception:
@@ -496,7 +496,7 @@ class SearchMixin:
                                 try:
                                     await event.send(
                                         event.plain_result(
-                                            f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过"
+                                            f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{illust_id}"
                                         )
                                     )
                                 except Exception:

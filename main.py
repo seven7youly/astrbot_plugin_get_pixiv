@@ -40,7 +40,7 @@ from .pixiv.lolicon import LoliconClient
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v1.1.0"
+PLUGIN_VERSION = "v1.1.1"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
 

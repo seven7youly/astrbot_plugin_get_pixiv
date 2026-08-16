@@ -57,6 +57,10 @@ def normalized_builtin_terms() -> frozenset[str]:
     )
 
 
+def safety_term_config_key(term: str) -> str:
+    return f"safety_term_{term}"
+
+
 def match_safety_term(value: object, terms: set[str] | frozenset[str]) -> str:
     normalized = normalize_safety_text(value)
     if not normalized:
