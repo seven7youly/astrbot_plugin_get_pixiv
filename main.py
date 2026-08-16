@@ -45,7 +45,7 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v2.0.1Beta"
+PLUGIN_VERSION = "v2.0.1Beta2"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
@@ -256,7 +256,7 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
             "/pv help\n"
             "    查看本帮助\n"
             "──────────────\n"
-            "开启 auto_trigger_enabled 后，可直接发送「来一份图」「来三张初音ミク图」等触发发图；\n"
+            "默认开启自然语言触发，可直接发送「来一份图」「来三张初音ミク图」等触发发图；\n"
             "接入大模型时，也可直接自然对话让 AI 调用发图（如「来张图」「发三张初音ミク的图」）。\n"
             "安全词开关与自定义屏蔽词请在插件 WebUI「内容安全设置」中管理。"
         )
@@ -305,7 +305,7 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
     @filter.regex(AUTO_TRIGGER_PATTERN)
     async def auto_trigger(self, event: AstrMessageEvent):
         """自然语言自动触发发图。"""
-        if not self._cfg_bool("auto_trigger_enabled", False):
+        if not self._cfg_bool("auto_trigger_enabled", True):
             return
         if not self._ensure_client_or_error(event):
             return
@@ -359,8 +359,8 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
             tag(string): 插画搜索标签，例如"初音ミク"；可为空字符串表示随机取图
             count(string): 要发送的图片数量（1-5），例如"3"
         """
-        if not self._cfg_bool("auto_trigger_enabled", False):
-            yield event.plain_result("⚠️ 自然语言发图未开启，请在插件配置中打开 auto_trigger_enabled")
+        if not self._cfg_bool("auto_trigger_enabled", True):
+            yield event.plain_result("⚠️ 自然语言发图已关闭，请在插件配置中打开 auto_trigger_enabled")
             return
         if not self._ensure_client_or_error(event):
             yield event.plain_result(

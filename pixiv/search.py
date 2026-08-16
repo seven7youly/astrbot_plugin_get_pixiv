@@ -174,6 +174,65 @@ class SearchMixin:
         except Exception:
             pass
 
+    async def _describe_images_with_llm(
+        self,
+        event: AstrMessageEvent,
+        tag: str,
+        downloaded: list[tuple[dict, str, str, int]],
+    ) -> str:
+        """调用当前会话的多模态大模型查看已发送图片，返回内容描述。
+
+        描述会绑定本次发图所用的搜索标签，让大模型结合标签客观评判图片内容；
+        无标签（随机取图）时仅使用 llm_describe_prompt 基础提示词。
+        直接复用发图时下载的临时文件路径，不新增磁盘占用；读取后由大模型
+        侧编码传输，临时文件仍由调用方在 finally 中清理。
+        """
+        try:
+            context = getattr(self, "context", None)
+            if context is None:
+                return ""
+            get_provider = getattr(context, "get_current_chat_provider_id", None)
+            llm_generate = getattr(context, "llm_generate", None)
+            if get_provider is None or llm_generate is None:
+                return ""
+            provider_id = await get_provider(event.unified_msg_origin)
+            if not provider_id:
+                logger.debug(f"{LOG_PREFIX} 未找到当前聊天模型，跳过图片描述")
+                return ""
+            image_paths = [path for _illust, path, _q, _s in downloaded if path]
+            if not image_paths:
+                return ""
+            base_prompt = self._cfg_str(
+                "llm_describe_prompt",
+                "请简要描述这张图片的内容、构图与氛围，用中文，不超过 80 字。",
+            )
+            tag_clean = str(tag or "").strip()
+            if tag_clean:
+                prompt = (
+                    f"{base_prompt}\n"
+                    f"这些图片是用户按标签「{tag_clean}」搜索并发送的插画，"
+                    f"请结合该标签客观描述图片内容，并判断图片是否与标签相符。"
+                )
+            else:
+                prompt = base_prompt
+            llm_resp = await llm_generate(
+                chat_provider_id=provider_id,
+                prompt=prompt,
+                image_urls=image_paths,
+            )
+            text = (getattr(llm_resp, "completion_text", "") or "").strip()
+            logger.info(
+                f"{LOG_PREFIX} 大模型已查看图片: image_count={len(image_paths)} "
+                f"tag_configured={'yes' if tag_clean else 'no'} "
+                f"description_len={len(text)}"
+            )
+            return text
+        except Exception as exc:
+            logger.debug(
+                f"{LOG_PREFIX} 大模型查看图片失败: error_type={type(exc).__name__}"
+            )
+            return ""
+
     async def _record_conversation(
         self,
         event: AstrMessageEvent,
@@ -181,6 +240,7 @@ class SearchMixin:
         count: int,
         sent_illust_ids: set[str],
         downloaded: list[tuple[dict, str, str, int]],
+        description: str = "",
     ) -> None:
         """把本次发图写入 AstrBot 对话历史，让大模型/AI 能看到插件发送的消息。"""
         try:
@@ -204,6 +264,8 @@ class SearchMixin:
             assistant_text = (
                 f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）"
             )
+            if description:
+                assistant_text += f"\n图片内容描述：{description}"
             await conv_mgr.add_message_pair(
                 cid=cid,
                 user_message=UserMessageSegment(content=[TextPart(text=user_text)]),
@@ -259,7 +321,7 @@ class SearchMixin:
             yield event.plain_result("🚫 内容安全服务暂不可用，本次请求已拒绝")
             return
         timeout_sec = self._cfg_float("request_timeout", 30.0, 5.0, 120.0)
-        quality = self._cfg_str("image_quality", "original")
+        quality = self._cfg_str("image_quality", "large")
         downgrade_limit_mb = self._cfg_float(
             "auto_downgrade_original_mb",
             DEFAULT_AUTO_DOWNGRADE_ORIGINAL_LIMIT_MB,
@@ -576,14 +638,30 @@ class SearchMixin:
                                     )
                                 except Exception:
                                     pass
-            # 将本次发送记录到 AstrBot 对话历史，让 AI 可见
-            if (
+            # 生成图片描述（不直接发到聊天框，仅用于持久记忆）
+            description = ""
+            if self._cfg_bool("llm_describe_images", False) and downloaded:
+                description = await self._describe_images_with_llm(event, tag, downloaded)
+
+            if description and not record_conversation:
+                # LLM 工具路径：作为工具结果回传大模型（由框架记录到对话历史，不直发聊天框）
+                yield description
+            elif (
                 record_conversation
                 and sent_illust_ids
-                and self._cfg_bool("record_message_to_conversation", True)
+                and (
+                    self._cfg_bool("record_message_to_conversation", True)
+                    or bool(description)
+                )
             ):
+                # 指令/自然语言触发路径：把发送结果与图片描述写入对话历史
                 await self._record_conversation(
-                    event, tag, count, sent_illust_ids, downloaded
+                    event,
+                    tag,
+                    count,
+                    sent_illust_ids,
+                    downloaded,
+                    description=description,
                 )
         finally:
             for p in temp_paths:
