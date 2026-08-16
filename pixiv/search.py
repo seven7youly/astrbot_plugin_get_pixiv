@@ -174,6 +174,53 @@ class SearchMixin:
         except Exception:
             pass
 
+    async def _record_conversation(
+        self,
+        event: AstrMessageEvent,
+        tag: str,
+        count: int,
+        sent_illust_ids: set[str],
+        downloaded: list[tuple[dict, str, str, int]],
+    ) -> None:
+        """把本次发图写入 AstrBot 对话历史，让大模型/AI 能看到插件发送的消息。"""
+        try:
+            conversation_manager = getattr(self, "context", None)
+            if conversation_manager is None:
+                return
+            conv_mgr = getattr(conversation_manager, "conversation_manager", None)
+            if conv_mgr is None:
+                return
+            cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+            if not cid:
+                return
+            from astrbot.core.agent.message import (
+                AssistantMessageSegment,
+                TextPart,
+                UserMessageSegment,
+            )
+
+            user_text = f"请求发图（标签：{tag or '随机'}，数量：{count}）"
+            sent_ids = sorted(sent_illust_ids)
+            assistant_text = (
+                f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）"
+            )
+            await conv_mgr.add_message_pair(
+                cid=cid,
+                user_message=UserMessageSegment(content=[TextPart(text=user_text)]),
+                assistant_message=AssistantMessageSegment(
+                    content=[TextPart(text=assistant_text)]
+                ),
+            )
+            logger.debug(
+                f"{LOG_PREFIX} 已记录发图消息到对话历史: cid={cid} "
+                f"sent_count={len(sent_ids)}"
+            )
+        except Exception as exc:
+            logger.debug(
+                f"{LOG_PREFIX} 记录发图消息到对话历史失败: "
+                f"error_type={type(exc).__name__}"
+            )
+
     async def _handle_search(
         self,
         event: AstrMessageEvent,
@@ -181,6 +228,7 @@ class SearchMixin:
         count_str: str,
         *,
         allow_r18_override: bool = False,
+        record_conversation: bool = True,
     ):
         """搜索并发送图片；Lolicon 失败时按需回退 Pixiv。"""
         # 频率限制
@@ -528,6 +576,15 @@ class SearchMixin:
                                     )
                                 except Exception:
                                     pass
+            # 将本次发送记录到 AstrBot 对话历史，让 AI 可见
+            if (
+                record_conversation
+                and sent_illust_ids
+                and self._cfg_bool("record_message_to_conversation", True)
+            ):
+                await self._record_conversation(
+                    event, tag, count, sent_illust_ids, downloaded
+                )
         finally:
             for p in temp_paths:
                 cleanup(p)

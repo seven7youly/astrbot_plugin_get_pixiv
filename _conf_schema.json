@@ -103,6 +103,12 @@
     "slider": {"min": 0, "max": 60, "step": 1},
     "hint": "同一用户两次请求的最小间隔，设为 0 禁用。防止刷屏。"
   },
+  "record_message_to_conversation": {
+    "description": "记录发送结果到对话",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，插件发图成功会把本次请求与发送结果写入 AstrBot 对话历史，让大模型/AI 在后续对话中看到插件发送的消息。仅对存在对话记录（如 AI 会话）时生效；LLM 工具调用由框架自动记录，不重复写入。"
+  },
   "builtin_safety_words_display": {
     "description": "内置安全词内容（只读）",
     "type": "text",

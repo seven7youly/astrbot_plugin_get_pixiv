@@ -45,7 +45,7 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v1.2.1"
+PLUGIN_VERSION = "v2.0.1Beta"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
@@ -256,7 +256,8 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
             "/pv help\n"
             "    查看本帮助\n"
             "──────────────\n"
-            "开启 auto_trigger_enabled 后，可直接发送「来一份图」「来三张初音ミク图」等触发发图。\n"
+            "开启 auto_trigger_enabled 后，可直接发送「来一份图」「来三张初音ミク图」等触发发图；\n"
+            "接入大模型时，也可直接自然对话让 AI 调用发图（如「来张图」「发三张初音ミク的图」）。\n"
             "安全词开关与自定义屏蔽词请在插件 WebUI「内容安全设置」中管理。"
         )
 
@@ -338,6 +339,39 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
         )
         async for result in self._handle_search(
             event, tag=tag_part, count_str=count_str
+        ):
+            yield result
+
+    # ──────────────────────────────────────────────────────────────
+    # LLM 工具：让 AstrBot 大模型在对话中以自然语言调用发图
+    # ──────────────────────────────────────────────────────────────
+
+    @filter.llm_tool(name="search_images")
+    async def tool_llm_search_images(
+        self,
+        event: AstrMessageEvent,
+        tag: str = "",
+        count: str = "1",
+    ):
+        """搜索并发送插画图片给用户。
+
+        Args:
+            tag(string): 插画搜索标签，例如"初音ミク"；可为空字符串表示随机取图
+            count(string): 要发送的图片数量（1-5），例如"3"
+        """
+        if not self._cfg_bool("auto_trigger_enabled", False):
+            yield event.plain_result("⚠️ 自然语言发图未开启，请在插件配置中打开 auto_trigger_enabled")
+            return
+        if not self._ensure_client_or_error(event):
+            yield event.plain_result(
+                "⚠️ 图片源暂不可用，请配置 Lolicon API，或填写 pixiv_refresh_token 作为回退"
+            )
+            return
+        async for result in self._handle_search(
+            event,
+            tag=str(tag or "").strip(),
+            count_str=str(count or "1").strip(),
+            record_conversation=False,
         ):
             yield result
 
