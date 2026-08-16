@@ -3,7 +3,10 @@
 通过标签搜索插画并发送图片，支持 Lolicon 主源、Pixiv 回退、内容安全过滤、去重和自然语言自动触发。
 
 搜索指令：
-    /px [标签] [数量]           搜索并发送图片
+    /pv [标签] [数量]           搜索并发送图片
+    /pv [标签] [数量] r18       单次取消 R18 限制（仅本次生效）
+    /pv 安全词                  查看全部安全词
+    /pv help                    查看指令帮助
 
 自动触发（需在配置中开启）：
     来一份图                   发送 1 张随机图片
@@ -33,6 +36,8 @@ from .pixiv.constants import MAX_IMAGE_COUNT
 from .pixiv.downloader import ImageDownloader
 from .pixiv.index import ImageIndexStore
 from .pixiv.lolicon import LoliconClient
+from .pixiv.safety import BUILTIN_SAFETY_TERMS, safety_term_config_key
+from .plugin_api import PluginWebApi
 
 # ──────────────────────────────────────────────────────────────────────
 # 常量
@@ -40,7 +45,8 @@ from .pixiv.lolicon import LoliconClient
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v1.1.1"
+PLUGIN_VERSION = "v1.2.1"
+WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
 
@@ -76,6 +82,12 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
         self._last_request: dict[str, float] = {}
         self.data_dir: Path | None = None
         self.image_index: ImageIndexStore | None = None
+        self.plugin_web_api = PluginWebApi(
+            self,
+            plugin_name=PLUGIN_NAME,
+            log_prefix=LOG_PREFIX,
+            internal_error_message=WEB_INTERNAL_ERROR_MESSAGE,
+        )
         self._termination_task: asyncio.Task[None] | None = None
 
     # ──────────────────────────────────────────────────────────────
@@ -95,6 +107,7 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
             retention_days=dedupe_days,
         )
         await self.image_index.cleanup_old_days(trigger="startup")
+        self.plugin_web_api.register()
         logger.info(f"{LOG_PREFIX} 插件已加载: version={PLUGIN_VERSION}")
 
     def _init_client(self):
@@ -189,20 +202,63 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
     # 指令：搜索（主指令）
     # ──────────────────────────────────────────────────────────────
 
-    @filter.command("px")
-    async def cmd_px(self, event: AstrMessageEvent, query: GreedyStr = GreedyStr):
-        """搜索并发送图片。参数: [标签] [数量]"""
+    @filter.command("pv")
+    async def cmd_pv(self, event: AstrMessageEvent, query: GreedyStr = GreedyStr):
+        """搜索并发送图片。参数: [标签] [数量]；末尾加 r18 单次取消 R18 限制；/pv 安全词 或 /pv help。"""
+        event.stop_event()
+        # 框架无参时传入空字符串；直接调用时则会保留默认哨兵。
+        raw_query = "" if query is GreedyStr else str(query or "")
+        trimmed = raw_query.strip()
+        lowered = trimmed.casefold()
+
+        if lowered in ("help", "帮助", "帮助信息", "帮助指令"):
+            yield event.plain_result(self._build_help_text())
+            return
+        if lowered in ("安全词", "安全词列表", "安全詞", "safety"):
+            yield event.plain_result(await self._build_safety_words_text())
+            return
+
+        # 末尾 r18：单次取消 R18 限制（仅本次指令生效）
+        allow_r18_override = False
+        tokens = trimmed.split()
+        if tokens and tokens[-1].casefold() == "r18":
+            allow_r18_override = True
+            trimmed = " ".join(tokens[:-1]).strip()
+
         if not self._ensure_client_or_error(event):
             yield event.plain_result(
                 "⚠️ 图片源暂不可用，请配置 Lolicon API，或填写 pixiv_refresh_token 作为回退"
             )
             return
-        event.stop_event()
-        # 框架无参时传入空字符串；直接调用时则会保留默认哨兵。
-        raw_query = "" if query is GreedyStr else str(query or "")
-        tag, count = self._split_tag_and_count(raw_query)
-        async for result in self._handle_search(event, tag=tag, count_str=count):
+        tag, count = self._split_tag_and_count(trimmed)
+        async for result in self._handle_search(
+            event,
+            tag=tag,
+            count_str=count,
+            allow_r18_override=allow_r18_override,
+        ):
             yield result
+
+    @staticmethod
+    def _build_help_text() -> str:
+        """生成指令帮助文本。"""
+        return (
+            "📖 星绘漫游指令帮助\n"
+            "──────────────\n"
+            "/pv [标签] [数量]\n"
+            "    按标签搜索发图，如：/pv 初音ミク 3\n"
+            "/pv [数量]\n"
+            "    无标签时随机发图，如：/pv 5\n"
+            "/pv [标签] [数量] r18\n"
+            "    单次取消 R18 限制（仅本次生效），如：/pv 初音ミク 2 r18\n"
+            "/pv 安全词\n"
+            "    查看全部内置与自定义安全词\n"
+            "/pv help\n"
+            "    查看本帮助\n"
+            "──────────────\n"
+            "开启 auto_trigger_enabled 后，可直接发送「来一份图」「来三张初音ミク图」等触发发图。\n"
+            "安全词开关与自定义屏蔽词请在插件 WebUI「内容安全设置」中管理。"
+        )
 
     @staticmethod
     def _split_tag_and_count(query: str) -> tuple[str, str]:
@@ -213,6 +269,37 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
         if tokens[-1].isdigit():
             return " ".join(tokens[:-1]), tokens[-1]
         return " ".join(tokens), ""
+
+    async def _build_safety_words_text(self) -> str:
+        """汇总内置安全词（含开关状态）与自定义安全词。"""
+        builtin_on: list[str] = []
+        builtin_off: list[str] = []
+        for term in BUILTIN_SAFETY_TERMS:
+            if self._cfg_bool(safety_term_config_key(term), True):
+                builtin_on.append(term)
+            else:
+                builtin_off.append(term)
+        lines = [f"🔒 内置安全词（{len(builtin_on) + len(builtin_off)}）："]
+        lines.append("✅ 启用：" + "、".join(builtin_on))
+        if builtin_off:
+            lines.append("❌ 停用：" + "、".join(builtin_off))
+        custom: list[str] = []
+        if self.image_index is not None:
+            try:
+                custom = [
+                    str(item.get("term") or "")
+                    for item in await self.image_index.list_safety_terms()
+                    if str(item.get("term") or "")
+                ]
+            except Exception as exc:
+                logger.warning(
+                    f"{LOG_PREFIX} 读取自定义安全词失败: error_type={type(exc).__name__}"
+                )
+        lines.append(
+            f"✏️ 自定义安全词（{len(custom)}）："
+            + ("、".join(custom) if custom else "无")
+        )
+        return "\n".join(lines)
 
     @filter.regex(AUTO_TRIGGER_PATTERN)
     async def auto_trigger(self, event: AstrMessageEvent):

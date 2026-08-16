@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#f6f7fb" />
+    <meta name="description" content="星绘漫游 - 内容安全设置：安全词逐词开关与自定义屏蔽词管理。" />
+    <title>内容安全设置 · 星绘漫游</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="kicker">XINGHUI MANYOU / CONTENT GUARD</p>
+          <h1>内容安全设置</h1>
+          <p class="subtitle">逐词控制内置安全词是否生效，并维护自定义屏蔽词。关闭安全词后，命中该词的作品与搜索词将不再被过滤。</p>
+        </div>
+        <div id="globalError" class="global-error" role="alert" hidden>
+          <span id="globalErrorMessage">部分数据加载失败。</span>
+          <button id="retryBtn" type="button">重新加载</button>
+        </div>
+      </header>
+
+      <main>
+        <!-- 内置安全词 -->
+        <section class="panel" aria-labelledby="builtinTitle">
+          <div class="panel-title">
+            <div>
+              <p>BUILT-IN TERMS</p>
+              <h2 id="builtinTitle">内置安全词</h2>
+            </div>
+            <span id="builtinCount" class="count" aria-live="polite">加载中…</span>
+          </div>
+
+          <div class="r18-row">
+            <div>
+              <p>R18 CONTENT</p>
+              <h3>🔞 R18 限制开关</h3>
+              <small>按下（填充红色）表示允许发送 R18 作品；未按下表示仅发送全年龄作品。相当于配置中的 allow_r18。</small>
+            </div>
+            <button id="r18Toggle" class="safety-toggle r18" type="button" aria-pressed="false">🔞 R18</button>
+          </div>
+
+          <label for="builtinSearch" class="sr-only">搜索内置安全词</label>
+          <input id="builtinSearch" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="输入关键字筛选内置安全词…" />
+          <div id="builtinTerms" class="toggle-grid" aria-live="polite"></div>
+        </section>
+
+        <!-- 自定义屏蔽词 -->
+        <section class="panel" aria-labelledby="customTitle">
+          <div class="panel-title">
+            <div>
+              <p>CUSTOM TERMS</p>
+              <h2 id="customTitle">自定义屏蔽词</h2>
+            </div>
+            <span id="customCount" class="count" aria-live="polite">加载中…</span>
+          </div>
+          <form id="termForm" class="inline-form">
+            <label for="termInput" class="sr-only">自定义屏蔽词</label>
+            <input id="termInput" name="custom_safety_term" maxlength="64" autocomplete="off" spellcheck="false" placeholder="例如：某些敏感词汇…" required />
+            <button type="submit">添加屏蔽词</button>
+            <p id="termError" class="form-error" aria-live="polite"></p>
+          </form>
+          <div id="customTerms" class="term-list" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

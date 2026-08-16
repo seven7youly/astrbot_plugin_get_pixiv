@@ -23,222 +23,6 @@
     "default": false,
     "hint": "默认关闭，仅发送全年龄（普通分级）作品；开启后允许发送 R18 作品。"
   },
-  "safety_term_r18": {
-    "description": "安全词：r18",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_r-18": {
-    "description": "安全词：r-18",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_r18g": {
-    "description": "安全词：r18g",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_r-18g": {
-    "description": "安全词：r-18g",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_nsfw": {
-    "description": "安全词：nsfw",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_裸体": {
-    "description": "安全词：裸体",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_全裸": {
-    "description": "安全词：全裸",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_裸露": {
-    "description": "安全词：裸露",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_露出": {
-    "description": "安全词：露出",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_成人": {
-    "description": "安全词：成人",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_色情": {
-    "description": "安全词：色情",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_性交": {
-    "description": "安全词：性交",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_性爱": {
-    "description": "安全词：性爱",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_性器": {
-    "description": "安全词：性器",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_乳首": {
-    "description": "安全词：乳首",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_乳房": {
-    "description": "安全词：乳房",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_触手": {
-    "description": "安全词：触手",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_猎奇": {
-    "description": "安全词：猎奇",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_血腥": {
-    "description": "安全词：血腥",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_断肢": {
-    "description": "安全词：断肢",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_肢解": {
-    "description": "安全词：肢解",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_内脏": {
-    "description": "安全词：内脏",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_尸体": {
-    "description": "安全词：尸体",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_腐烂": {
-    "description": "安全词：腐烂",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_虐杀": {
-    "description": "安全词：虐杀",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_guro": {
-    "description": "安全词：guro",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_gore": {
-    "description": "安全词：gore",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_grotesque": {
-    "description": "安全词：grotesque",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_グロ": {
-    "description": "安全词：グロ",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_グロテスク": {
-    "description": "安全词：グロテスク",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_リョナ": {
-    "description": "安全词：リョナ",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_猟奇": {
-    "description": "安全词：猟奇",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_欠損": {
-    "description": "安全词：欠損",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_切断": {
-    "description": "安全词：切断",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_内臓": {
-    "description": "安全词：内臓",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
-  "safety_term_死体": {
-    "description": "安全词：死体",
-    "type": "bool",
-    "default": true,
-    "hint": "开启后命中该安全词的作品与搜索词将被过滤。"
-  },
   "lolicon_image_proxy_origins": {
     "description": "Lolicon 图片反代地址",
     "type": "text",
@@ -318,5 +102,236 @@
     "default": 3,
     "slider": {"min": 0, "max": 60, "step": 1},
     "hint": "同一用户两次请求的最小间隔，设为 0 禁用。防止刷屏。"
+  },
+  "builtin_safety_words_display": {
+    "description": "内置安全词内容（只读）",
+    "type": "text",
+    "default": "r18、r-18、r18g、r-18g、nsfw、裸体、全裸、裸露、露出、成人、色情、性交、性爱、性器、乳首、乳房、触手、猎奇、血腥、断肢、肢解、内脏、尸体、腐烂、虐杀、guro、gore、grotesque、グロ、グロテスク、リョナ、猟奇、欠損、切断、内臓、死体",
+    "readonly": true,
+    "obvious_hint": true,
+    "hint": "内置安全词内容，仅供查看；启停控制请在插件 WebUI「内容安全设置」中操作。"
+  },
+  "custom_safety_words_display": {
+    "description": "自定义屏蔽词（只读）",
+    "type": "text",
+    "default": "请在插件 WebUI「内容安全设置」中逐个添加或删除自定义屏蔽词。",
+    "readonly": true,
+    "hint": "自定义屏蔽词的添加与删除只能在插件 WebUI「内容安全设置」中完成。"
+  },
+  "safety_term_r18": {
+    "description": "安全词：r18",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_r-18": {
+    "description": "安全词：r-18",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_r18g": {
+    "description": "安全词：r18g",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_r-18g": {
+    "description": "安全词：r-18g",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_nsfw": {
+    "description": "安全词：nsfw",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_裸体": {
+    "description": "安全词：裸体",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_全裸": {
+    "description": "安全词：全裸",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_裸露": {
+    "description": "安全词：裸露",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_露出": {
+    "description": "安全词：露出",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_成人": {
+    "description": "安全词：成人",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_色情": {
+    "description": "安全词：色情",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_性交": {
+    "description": "安全词：性交",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_性爱": {
+    "description": "安全词：性爱",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_性器": {
+    "description": "安全词：性器",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_乳首": {
+    "description": "安全词：乳首",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_乳房": {
+    "description": "安全词：乳房",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_触手": {
+    "description": "安全词：触手",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_猎奇": {
+    "description": "安全词：猎奇",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_血腥": {
+    "description": "安全词：血腥",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_断肢": {
+    "description": "安全词：断肢",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_肢解": {
+    "description": "安全词：肢解",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_内脏": {
+    "description": "安全词：内脏",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_尸体": {
+    "description": "安全词：尸体",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_腐烂": {
+    "description": "安全词：腐烂",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_虐杀": {
+    "description": "安全词：虐杀",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_guro": {
+    "description": "安全词：guro",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_gore": {
+    "description": "安全词：gore",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_grotesque": {
+    "description": "安全词：grotesque",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_グロ": {
+    "description": "安全词：グロ",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_グロテスク": {
+    "description": "安全词：グロテスク",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_リョナ": {
+    "description": "安全词：リョナ",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_猟奇": {
+    "description": "安全词：猟奇",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_欠損": {
+    "description": "安全词：欠損",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_切断": {
+    "description": "安全词：切断",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_内臓": {
+    "description": "安全词：内臓",
+    "type": "bool",
+    "default": true,
+    "invisible": true
+  },
+  "safety_term_死体": {
+    "description": "安全词：死体",
+    "type": "bool",
+    "default": true,
+    "invisible": true
   }
 }

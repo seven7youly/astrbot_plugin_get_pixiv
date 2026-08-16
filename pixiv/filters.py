@@ -102,10 +102,13 @@ class FiltersMixin:
         """Filter out every Pixiv manga item."""
         return [il for il in illusts if il.get("type") != "manga"]
 
-    async def _filter_blacklisted_illusts(self, illusts: list[dict]) -> list[dict]:
+    async def _filter_blacklisted_illusts(
+        self, illusts: list[dict], *, allow_r18: bool | None = None
+    ) -> list[dict]:
         if not illusts:
             return illusts
-        allow_r18 = self._allow_r18()
+        if allow_r18 is None:
+            allow_r18 = self._allow_r18()
         safety_terms = await self._safety_terms()
         blacklisted: set[str] = set()
         try:

@@ -77,6 +77,8 @@ class SearchMixin:
         offset: int = 0,
         aspect_ratio: str = "",
         use_page_cursor: bool = True,
+        allow_r18: bool | None = None,
+        source_key_suffix: str = "",
     ) -> tuple[list[dict], int, str]:
         """优先请求 Lolicon，失败后按有无标签回退 Pixiv。"""
         lolicon_client = getattr(self, "lolicon_client", None)
@@ -84,14 +86,17 @@ class SearchMixin:
             try:
                 if tag:
                     illusts = await lolicon_client.search(
-                        tag, count=count, aspect_ratio=aspect_ratio
+                        tag,
+                        count=count,
+                        aspect_ratio=aspect_ratio,
+                        allow_r18=allow_r18,
                     )
-                    source_key = self._source_key(tag, "lolicon")
+                    source_key = self._source_key(tag, "lolicon") + source_key_suffix
                 else:
                     illusts = await lolicon_client.random(
-                        count=count, aspect_ratio=aspect_ratio
+                        count=count, aspect_ratio=aspect_ratio, allow_r18=allow_r18
                     )
-                    source_key = "lolicon:random"
+                    source_key = "lolicon:random" + source_key_suffix
                 if illusts:
                     return illusts, len(illusts), source_key
             except Exception as exc:
@@ -101,7 +106,9 @@ class SearchMixin:
                     f"error_type={type(exc).__name__}"
                 )
 
-        pixiv_source_key = self._source_key(tag, "pixiv") if tag else "pixiv:recommended"
+        pixiv_source_key = (
+            self._source_key(tag, "pixiv") if tag else "pixiv:recommended"
+        ) + source_key_suffix
         page_offset = offset
         if use_page_cursor and page_offset == 0 and self.image_index is not None:
             try:
@@ -134,6 +141,14 @@ class SearchMixin:
             return [], 0, pixiv_source_key
         return illusts, len(illusts), source_key
 
+    @staticmethod
+    def _artwork_pid(illust: dict, illust_id: str) -> str:
+        """提取作品在 Pixiv 上的纯数字 ID（Lolicon 的 id 形如 pid:page）。"""
+        pid = str(illust.get("pid") or "").strip()
+        if pid:
+            return pid
+        return str(illust_id or "").split(":")[0]
+
     async def _record_image_usage(
         self,
         event: AstrMessageEvent,
@@ -164,6 +179,8 @@ class SearchMixin:
         event: AstrMessageEvent,
         tag: str,
         count_str: str,
+        *,
+        allow_r18_override: bool = False,
     ):
         """搜索并发送图片；Lolicon 失败时按需回退 Pixiv。"""
         # 频率限制
@@ -181,6 +198,10 @@ class SearchMixin:
             count = max(1, min(int(count_str), max_count)) if count_str else 1
         except (TypeError, ValueError):
             count = 1
+
+        # R18：单次覆盖优先，否则跟随配置
+        r18_mode = allow_r18_override or self._cfg_bool("allow_r18", False)
+        source_key_suffix = ":r18" if allow_r18_override else ""
 
         try:
             if tag and await self._blocked_query_term(tag):
@@ -202,14 +223,18 @@ class SearchMixin:
 
         # 获取作品列表：Lolicon 主源，Pixiv 搜索/推荐回退。
         illusts, raw_count, source_key = await self._fetch_source_candidates(
-            event, tag, count=max_count
+            event,
+            tag,
+            count=max_count,
+            allow_r18=r18_mode,
+            source_key_suffix=source_key_suffix,
         )
         logger.info(
             f"{LOG_PREFIX} 搜索候选获取完成: "
             f"tag_configured={'yes' if tag else 'no'} "
             f"source={_search_source_label(source_key)} "
             f"requested_count={count} quality={_search_quality_label(quality)} "
-            f"candidate_count={raw_count}"
+            f"candidate_count={raw_count} r18={'yes' if r18_mode else 'no'}"
         )
 
         if not illusts:
@@ -225,7 +250,9 @@ class SearchMixin:
                 return
 
         try:
-            illusts = await self._filter_blacklisted_illusts(illusts)
+            illusts = await self._filter_blacklisted_illusts(
+                illusts, allow_r18=r18_mode
+            )
         except RuntimeError:
             yield event.plain_result("🚫 内容安全服务暂不可用，本次请求已拒绝")
             return
@@ -433,7 +460,7 @@ class SearchMixin:
                                     try:
                                         await event.send(
                                             event.plain_result(
-                                                f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{illust_id}"
+                                                f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{self._artwork_pid(illust, illust_id)}"
                                             )
                                         )
                                     except Exception:
@@ -496,7 +523,7 @@ class SearchMixin:
                                 try:
                                     await event.send(
                                         event.plain_result(
-                                            f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{illust_id}"
+                                            f"⚠️ 作品 {illust_id}「{title}」发送失败，已跳过\n请自行查看 https://www.pixiv.net/en/artworks/{self._artwork_pid(illust, illust_id)}"
                                         )
                                     )
                                 except Exception:
