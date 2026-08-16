@@ -7,6 +7,8 @@ const state = {
   loaded: false,
   pendingToggle: new Set(),
   pendingR18: false,
+  config: {},
+  configSchema: {},
 };
 
 const $ = (id) => document.getElementById(id);
@@ -23,6 +25,8 @@ const els = {
   termInput: $("termInput"),
   termError: $("termError"),
   r18Toggle: $("r18Toggle"),
+  configForm: $("configForm"),
+  configSaveBtn: $("configSaveBtn"),
   toast: $("toast"),
 };
 
@@ -202,13 +206,154 @@ async function loadSafety() {
   }
 }
 
+function switchView(name) {
+  document.querySelectorAll(".workspace-nav [data-view]").forEach((button) => {
+    const active = button.dataset.view === name;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  document.querySelectorAll(".workspace").forEach((view) => {
+    view.classList.toggle("active", view.id === `${name}View`);
+  });
+}
+
+function toggleConfigBool(button) {
+  const key = button.dataset.key;
+  state.config[key] = !state.config[key];
+  button.classList.toggle("on", state.config[key]);
+  button.setAttribute("aria-pressed", String(state.config[key]));
+  console.log(`[config-toggle] ${key} -> ${state.config[key] ? "ON" : "OFF"}`, {
+    key,
+    enabled: state.config[key],
+  });
+}
+
+function renderConfigField(key, meta) {
+  const value = state.config[key];
+  const label = meta.label || key;
+  const hint = meta.hint ? `<p class="config-hint">${escapeHtml(meta.hint)}</p>` : "";
+  const full = meta.type === "text" ? " full" : "";
+  let control = "";
+
+  if (meta.type === "bool") {
+    control = `
+      <button class="toggle-switch${value ? " on" : ""}" type="button"
+        data-key="${escapeHtml(key)}" aria-pressed="${value ? "true" : "false"}">
+        ${value ? "开启" : "关闭"}
+      </button>`;
+  } else if (meta.type === "select") {
+    control = `
+      <select data-key="${escapeHtml(key)}">
+        ${(meta.options || []).map((opt) =>
+          `<option value="${escapeHtml(opt)}"${String(opt) === String(value) ? " selected" : ""}>${escapeHtml(opt)}</option>`
+        ).join("")}
+      </select>`;
+  } else if (meta.type === "int" || meta.type === "float") {
+    const step = meta.type === "float" ? "0.5" : "1";
+    control = `
+      <input type="number" data-key="${escapeHtml(key)}"
+        value="${escapeHtml(value)}"
+        min="${escapeHtml(meta.min ?? "")}" max="${escapeHtml(meta.max ?? "")}"
+        step="${step}" />`;
+  } else if (meta.type === "text") {
+    control = `
+      <textarea data-key="${escapeHtml(key)}" rows="3">${escapeHtml(value)}</textarea>`;
+  } else {
+    control = `
+      <input type="text" data-key="${escapeHtml(key)}" value="${escapeHtml(value)}" />`;
+  }
+
+  return `
+    <div class="config-field${full}">
+      <label>${escapeHtml(label)}</label>
+      ${control}
+      ${hint}
+    </div>`;
+}
+
+function renderConfigForm() {
+  const schema = state.configSchema || {};
+  const keys = Object.keys(schema);
+  if (!keys.length) {
+    els.configForm.innerHTML = '<div class="empty">配置加载失败，请点击上方“重新加载”。</div>';
+    return;
+  }
+  const groups = {};
+  keys.forEach((key) => {
+    const group = schema[key]?.group || "basic";
+    (groups[group] = groups[group] || []).push(key);
+  });
+  const groupLabels = { basic: "基础配置", llm: "大语言模型（LLM）" };
+
+  els.configForm.innerHTML = Object.entries(groups).map(([group, groupKeys]) => `
+    <div class="config-group full">
+      <h3 class="config-group-title">${escapeHtml(groupLabels[group] || group)}</h3>
+      <div class="config-group-grid">
+        ${groupKeys.map((key) => renderConfigField(key, schema[key] || {})).join("")}
+      </div>
+    </div>
+  `).join("");
+
+  // 布尔开关
+  els.configForm.querySelectorAll(".toggle-switch").forEach((button) => {
+    button.addEventListener("click", () => toggleConfigBool(button));
+  });
+  // 数值/文本输入
+  els.configForm.querySelectorAll("input[data-key], select[data-key], textarea[data-key]").forEach((input) => {
+    const key = input.dataset.key;
+    const meta = schema[key] || {};
+    const sync = () => {
+      if (meta.type === "int" || meta.type === "float") {
+        state.config[key] = input.value === "" ? "" : (meta.type === "float" ? Number(input.value) : parseInt(input.value, 10));
+      } else {
+        state.config[key] = input.value;
+      }
+    };
+    input.addEventListener("input", sync);
+    input.addEventListener("change", sync);
+  });
+}
+
+async function loadConfig() {
+  try {
+    const result = await apiGet("config");
+    state.config = result.config || {};
+    state.configSchema = result.schema || {};
+    hideGlobalError();
+    renderConfigForm();
+  } catch (error) {
+    showGlobalError(error.message || "插件配置读取失败");
+    showToast(error.message || "插件配置读取失败", "error");
+    throw error;
+  }
+}
+
+async function saveConfig() {
+  setButtonBusy(els.configSaveBtn, true, "保存中…", "保存配置");
+  try {
+    const result = await apiPost("config", { config: state.config });
+    showToast("插件配置已保存");
+    if (result.persisted === false) {
+      showToast("配置已应用，但写入文件失败，请检查日志", "error");
+    }
+  } catch (error) {
+    showToast(error.message || "保存失败", "error");
+  } finally {
+    setButtonBusy(els.configSaveBtn, false, "保存中…", "保存配置");
+  }
+}
+
 function bindEvents() {
+  document.querySelectorAll(".workspace-nav [data-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
   els.builtinSearch.addEventListener("input", renderSafety);
   els.r18Toggle.addEventListener("click", toggleR18);
+  els.configSaveBtn.addEventListener("click", saveConfig);
   els.retryBtn.addEventListener("click", async () => {
     try {
-      await loadSafety();
-    } catch { /* handled inside loadSafety */ }
+      await Promise.allSettled([loadSafety(), loadConfig()]);
+    } catch { /* handled inside loaders */ }
   });
 
   els.termForm.addEventListener("submit", async (event) => {
@@ -240,9 +385,11 @@ async function start() {
   }
   await bridge.ready();
   bindEvents();
+  const initialView = location.hash.slice(1) === "config" ? "config" : "safety";
+  switchView(initialView);
   try {
-    await loadSafety();
-  } catch { /* handled inside loadSafety */ }
+    await Promise.allSettled([loadSafety(), loadConfig()]);
+  } catch { /* handled inside loaders */ }
 }
 
 start();

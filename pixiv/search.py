@@ -187,51 +187,34 @@ class SearchMixin:
         直接复用发图时下载的临时文件路径，不新增磁盘占用；读取后由大模型
         侧编码传输，临时文件仍由调用方在 finally 中清理。
         """
-        try:
-            context = getattr(self, "context", None)
-            if context is None:
-                return ""
-            get_provider = getattr(context, "get_current_chat_provider_id", None)
-            llm_generate = getattr(context, "llm_generate", None)
-            if get_provider is None or llm_generate is None:
-                return ""
-            provider_id = await get_provider(event.unified_msg_origin)
-            if not provider_id:
-                logger.debug(f"{LOG_PREFIX} 未找到当前聊天模型，跳过图片描述")
-                return ""
-            image_paths = [path for _illust, path, _q, _s in downloaded if path]
-            if not image_paths:
-                return ""
-            base_prompt = self._cfg_str(
-                "llm_describe_prompt",
-                "请简要描述这张图片的内容、构图与氛围，用中文，不超过 80 字。",
+        image_paths = [path for _illust, path, _q, _s in downloaded if path]
+        if not image_paths:
+            return ""
+        base_prompt = self._cfg_str(
+            "llm_describe_prompt",
+            "请简要描述这张图片的内容、构图与氛围，用中文，不超过 80 字。",
+        )
+        tag_clean = str(tag or "").strip()
+        if tag_clean:
+            prompt = (
+                f"{base_prompt}\n"
+                f"这些图片是用户按标签「{tag_clean}」搜索并发送的插画，"
+                f"请结合该标签客观描述图片内容，并判断图片是否与标签相符。"
             )
-            tag_clean = str(tag or "").strip()
-            if tag_clean:
-                prompt = (
-                    f"{base_prompt}\n"
-                    f"这些图片是用户按标签「{tag_clean}」搜索并发送的插画，"
-                    f"请结合该标签客观描述图片内容，并判断图片是否与标签相符。"
-                )
-            else:
-                prompt = base_prompt
-            llm_resp = await llm_generate(
-                chat_provider_id=provider_id,
-                prompt=prompt,
-                image_urls=image_paths,
-            )
-            text = (getattr(llm_resp, "completion_text", "") or "").strip()
-            logger.info(
-                f"{LOG_PREFIX} 大模型已查看图片: image_count={len(image_paths)} "
-                f"tag_configured={'yes' if tag_clean else 'no'} "
-                f"description_len={len(text)}"
-            )
-            return text
-        except Exception as exc:
-            logger.debug(
-                f"{LOG_PREFIX} 大模型查看图片失败: error_type={type(exc).__name__}"
+        else:
+            prompt = base_prompt
+        text = await self._llm_generate_text(event, prompt, image_urls=image_paths)
+        if not text:
+            logger.warning(
+                f"{LOG_PREFIX} 大模型未返回图片描述，请确认所用模型支持图片输入（多模态）"
             )
             return ""
+        logger.info(
+            f"{LOG_PREFIX} 大模型已查看图片: image_count={len(image_paths)} "
+            f"tag_configured={'yes' if tag_clean else 'no'} "
+            f"description_len={len(text)}"
+        )
+        return text
 
     async def _record_conversation(
         self,
@@ -242,7 +225,11 @@ class SearchMixin:
         downloaded: list[tuple[dict, str, str, int]],
         description: str = "",
     ) -> None:
-        """把本次发图写入 AstrBot 对话历史，让大模型/AI 能看到插件发送的消息。"""
+        """把本次发图写入 AstrBot 对话历史，让大模型/AI 能看到插件发送的消息。
+
+        若该会话尚无对话记录，会自动新建一条对话，保证发送结果与图片描述
+        总能持久写入（如无会话记录则大模型后续无法“看到”图片内容）。
+        """
         try:
             conversation_manager = getattr(self, "context", None)
             if conversation_manager is None:
@@ -250,9 +237,21 @@ class SearchMixin:
             conv_mgr = getattr(conversation_manager, "conversation_manager", None)
             if conv_mgr is None:
                 return
-            cid = await conv_mgr.get_curr_conversation_id(event.unified_msg_origin)
+            umo = event.unified_msg_origin
+            cid = await conv_mgr.get_curr_conversation_id(umo)
             if not cid:
-                return
+                try:
+                    cid = await conv_mgr.new_conversation(umo)
+                    logger.debug(
+                        f"{LOG_PREFIX} 会话无对话记录，已自动新建对话: "
+                        f"cid={cid}"
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        f"{LOG_PREFIX} 新建对话失败，跳过记录: "
+                        f"error_type={type(exc).__name__}"
+                    )
+                    return
             from astrbot.core.agent.message import (
                 AssistantMessageSegment,
                 TextPart,
@@ -273,15 +272,162 @@ class SearchMixin:
                     content=[TextPart(text=assistant_text)]
                 ),
             )
-            logger.debug(
+            logger.info(
                 f"{LOG_PREFIX} 已记录发图消息到对话历史: cid={cid} "
-                f"sent_count={len(sent_ids)}"
+                f"sent_count={len(sent_ids)} "
+                f"has_description={'yes' if description else 'no'}"
             )
         except Exception as exc:
-            logger.debug(
+            logger.warning(
                 f"{LOG_PREFIX} 记录发图消息到对话历史失败: "
                 f"error_type={type(exc).__name__}"
             )
+
+    async def _llm_generate_text(
+        self,
+        event: AstrMessageEvent,
+        prompt: str,
+        image_urls: list[str] | None = None,
+    ) -> str:
+        """调用当前会话大模型生成文本；无可用的聊天模型或调用失败返回空串。"""
+        try:
+            context_obj = getattr(self, "context", None)
+            if context_obj is None:
+                return ""
+            get_provider = getattr(context_obj, "get_current_chat_provider_id", None)
+            llm_generate = getattr(context_obj, "llm_generate", None)
+            if get_provider is None or llm_generate is None:
+                return ""
+            provider_id = await get_provider(event.unified_msg_origin)
+            if not provider_id:
+                return ""
+            llm_resp = await llm_generate(
+                chat_provider_id=provider_id,
+                prompt=prompt,
+                image_urls=image_urls or None,
+            )
+            return (getattr(llm_resp, "completion_text", "") or "").strip()
+        except Exception:
+            return ""
+
+    async def _reply(
+        self, event: AstrMessageEvent, fallback: str, context: str = ""
+    ) -> str:
+        """按当前会话大模型的人格改写回复；未开启或调用失败时返回默认文案。"""
+        if not self._cfg_bool("llm_natural_replies", True):
+            return fallback
+        prompt = (
+            "你是当前会话的机器人角色。下面是一条本应由插件输出的功能提示，"
+            "请用符合你人格设定的自然口语改写为一句（不超过 30 字），保留原意，"
+            "不要解释、引号、Markdown 或多余文字。\n"
+            f"提示：{fallback}\n"
+            f"背景：{context or '发图相关提示'}"
+        )
+        text = await self._llm_generate_text(event, prompt)
+        return text or fallback
+
+    async def _optimize_search_tag(self, event: AstrMessageEvent, tag: str) -> str:
+        """让大模型优化/改写搜索标签（如翻译为日语）；失败返回空串。"""
+        if not tag:
+            return ""
+        prompt = (
+            f"插画搜索标签「{tag}」在图片源上没有结果。"
+            f"请给出一个更可能命中结果的替换标签：优先翻译成日语标签，"
+            f"或用更常见的英文/日语词表达同一个主题。"
+            f"只输出替换后的标签本身，不要引号、解释、编号或多余文字。"
+        )
+        text = await self._llm_generate_text(event, prompt)
+        text = text.strip().strip("\"'“”‘’《》【】[]()")
+        text = " ".join(text.split())
+        return text[:60]
+
+    async def _fetch_search_candidates(
+        self,
+        event: AstrMessageEvent,
+        tag: str,
+        *,
+        count: int,
+        allow_r18: bool,
+        source_key_suffix: str,
+        tag_retry_enabled: bool = False,
+        tag_retry_limit: int = 0,
+    ) -> tuple[list[dict], str, int, str, str]:
+        """获取并过滤候选作品；无结果时（开启标签重试）让大模型更换标签重试。
+
+        返回 (illusts, source_key, raw_count, search_tag, reason)。
+        reason 为空表示成功；否则为失败原因代码（blocked/safety_error/
+        no_results/filtered_manga/filtered_blacklist）。
+        """
+        filter_manga = self._cfg_bool("filter_manga", True)
+        current_tag = tag
+        reason = ""
+        for attempt in range(tag_retry_limit + 1):
+            if attempt > 0:
+                new_tag = await self._optimize_search_tag(event, current_tag)
+                if not new_tag:
+                    reason = "no_results"
+                    break
+                current_tag = new_tag
+                logger.info(
+                    f"{LOG_PREFIX} 标签重试 {attempt}/{tag_retry_limit}: "
+                    f"已更换标签 {tag!r} -> {current_tag!r}"
+                )
+
+            try:
+                if current_tag and await self._blocked_query_term(current_tag):
+                    reason = "blocked"
+                    if not tag_retry_enabled:
+                        break
+                    continue
+            except RuntimeError:
+                return [], "", 0, current_tag, "safety_error"
+
+            illusts, raw_count, source_key = await self._fetch_source_candidates(
+                event,
+                current_tag,
+                count=count,
+                allow_r18=allow_r18,
+                source_key_suffix=source_key_suffix,
+            )
+            if not illusts:
+                reason = "no_results"
+                if not tag_retry_enabled:
+                    break
+                continue
+
+            if filter_manga:
+                illusts = self._filter_manga(illusts)
+                if not illusts:
+                    reason = "filtered_manga"
+                    if not tag_retry_enabled:
+                        break
+                    continue
+
+            try:
+                illusts = await self._filter_blacklisted_illusts(
+                    illusts, allow_r18=allow_r18
+                )
+            except RuntimeError:
+                return [], "", 0, current_tag, "safety_error"
+            if not illusts:
+                reason = "filtered_blacklist"
+                if not tag_retry_enabled:
+                    break
+                continue
+
+            return illusts, source_key, raw_count, current_tag, ""
+
+        return [], "", 0, current_tag, reason
+
+    @staticmethod
+    def _search_failure_message(reason: str) -> str:
+        return {
+            "blocked": "🚫 搜索词不符合内容安全要求",
+            "safety_error": "🚫 内容安全服务暂不可用，本次请求已拒绝",
+            "no_results": "❌ 图片源请求失败或无结果，换个标签试试",
+            "filtered_manga": "😶 过滤漫画后没有可用作品，可关闭漫画过滤后重试",
+            "filtered_blacklist": "😶 可用作品都被内容安全策略过滤了，换个标签后再试",
+        }.get(reason, "❌ 图片源请求失败或无结果，换个标签试试")
 
     async def _handle_search(
         self,
@@ -291,6 +437,7 @@ class SearchMixin:
         *,
         allow_r18_override: bool = False,
         record_conversation: bool = True,
+        tag_retry_enabled: bool = False,
     ):
         """搜索并发送图片；Lolicon 失败时按需回退 Pixiv。"""
         # 频率限制
@@ -299,7 +446,11 @@ class SearchMixin:
             logger.debug(
                 f"{LOG_PREFIX} 搜索请求触发频率限制: retry_after_seconds={wait}"
             )
-            yield event.plain_result(f"⏳ 请求太频繁，请 {wait} 秒后再试")
+            yield event.plain_result(
+                await self._reply(
+                    event, f"⏳ 请求太频繁，请 {wait} 秒后再试", "频率限制"
+                )
+            )
             return
 
         # 参数解析
@@ -313,13 +464,6 @@ class SearchMixin:
         r18_mode = allow_r18_override or self._cfg_bool("allow_r18", False)
         source_key_suffix = ":r18" if allow_r18_override else ""
 
-        try:
-            if tag and await self._blocked_query_term(tag):
-                yield event.plain_result("🚫 搜索词不符合内容安全要求")
-                return
-        except RuntimeError:
-            yield event.plain_result("🚫 内容安全服务暂不可用，本次请求已拒绝")
-            return
         timeout_sec = self._cfg_float("request_timeout", 30.0, 5.0, 120.0)
         quality = self._cfg_str("image_quality", "large")
         downgrade_limit_mb = self._cfg_float(
@@ -329,48 +473,40 @@ class SearchMixin:
             100.0,
         )
         downgrade_limit_bytes = int(downgrade_limit_mb * 1024 * 1024)
-        filter_manga = self._cfg_bool("filter_manga", True)
 
-        # 获取作品列表：Lolicon 主源，Pixiv 搜索/推荐回退。
-        illusts, raw_count, source_key = await self._fetch_source_candidates(
-            event,
-            tag,
-            count=max_count,
-            allow_r18=r18_mode,
-            source_key_suffix=source_key_suffix,
+        # 获取候选：无结果时（自然语言调用）让大模型更换标签重试
+        tag_retry_limit = (
+            self._cfg_int("llm_search_tag_retries", 2, 0, 5)
+            if tag_retry_enabled
+            else 0
         )
+        illusts, source_key, raw_count, search_tag, reason = (
+            await self._fetch_search_candidates(
+                event,
+                tag,
+                count=max_count,
+                allow_r18=r18_mode,
+                source_key_suffix=source_key_suffix,
+                tag_retry_enabled=tag_retry_enabled,
+                tag_retry_limit=tag_retry_limit,
+            )
+        )
+        if reason:
+            yield event.plain_result(
+                await self._reply(
+                    event,
+                    self._search_failure_message(reason),
+                    f"标签：{search_tag or '随机'}",
+                )
+            )
+            return
         logger.info(
             f"{LOG_PREFIX} 搜索候选获取完成: "
-            f"tag_configured={'yes' if tag else 'no'} "
+            f"tag_configured={'yes' if search_tag else 'no'} "
             f"source={_search_source_label(source_key)} "
             f"requested_count={count} quality={_search_quality_label(quality)} "
             f"candidate_count={raw_count} r18={'yes' if r18_mode else 'no'}"
         )
-
-        if not illusts:
-            yield event.plain_result("❌ 图片源请求失败或无结果，换个标签试试")
-            return
-
-        if filter_manga:
-            illusts = self._filter_manga(illusts)
-            if not illusts:
-                yield event.plain_result(
-                    "😶 过滤漫画后没有可用作品，可关闭漫画过滤后重试"
-                )
-                return
-
-        try:
-            illusts = await self._filter_blacklisted_illusts(
-                illusts, allow_r18=r18_mode
-            )
-        except RuntimeError:
-            yield event.plain_result("🚫 内容安全服务暂不可用，本次请求已拒绝")
-            return
-        if not illusts:
-            yield event.plain_result(
-                "😶 可用作品都被内容安全策略过滤了，换个标签后再试"
-            )
-            return
 
         pick_count = min(count, len(illusts))
         dedupe_days = self._cfg_int("dedupe_days", 1, 0, 7)
@@ -381,7 +517,9 @@ class SearchMixin:
             try:
                 await self.image_index.set_retention_days(dedupe_days)
             except Exception:
-                yield event.plain_result("图片去重索引更新失败，请稍后重试")
+                yield event.plain_result(
+                    await self._reply(event, "图片去重索引更新失败，请稍后重试", "去重索引")
+                )
                 return
 
         chosen = await self._pick_illusts(
@@ -394,7 +532,11 @@ class SearchMixin:
         )
         if not chosen:
             yield event.plain_result(
-                "当前去重范围内没有未发送过的图片了，换个标签或稍后再试"
+                await self._reply(
+                    event,
+                    "当前去重范围内没有未发送过的图片了，换个标签或稍后再试",
+                    "发图去重",
+                )
             )
             return
         pick_count = len(chosen)
@@ -442,7 +584,11 @@ class SearchMixin:
 
             # 统一发送（避免 yield 和 send 混用导致消息拆分）
             if not downloaded:
-                yield event.plain_result("😢 所有图片均下载失败，请稍后再试")
+                yield event.plain_result(
+                    await self._reply(
+                        event, "😢 所有图片均下载失败，请稍后再试", "图片下载"
+                    )
+                )
                 return
 
             # 非 OneBot 平台不支持合并转发，自动降级。

@@ -11,6 +11,19 @@
   --shadow: 0 1px 3px rgba(20, 24, 40, 0.06), 0 4px 16px rgba(20, 24, 40, 0.05);
 }
 
+/* 深色模式：由 AstrBot WebUI 通过 data-theme 属性同步切换 */
+[data-theme="dark"] {
+  --bg: #171a21;
+  --surface: #1f232e;
+  --border: #343a48;
+  --text: #e6e9f2;
+  --muted: #9aa3b5;
+  --accent: #8b7cf0;
+  --accent-soft: #2a2438;
+  --danger: #e5534b;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -382,6 +395,208 @@ body {
 
 .toast.error {
   background: var(--danger);
+}
+
+/* ── 标签页导航 ─────────────────────────────── */
+.workspace-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.workspace-nav button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.workspace-nav button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.workspace-nav button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.workspace {
+  display: none;
+}
+
+.workspace.active {
+  display: block;
+}
+
+/* ── 插件配置表单 ───────────────────────────── */
+.config-notice {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.primary-btn {
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 9px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.primary-btn:hover {
+  filter: brightness(1.08);
+}
+
+.primary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.config-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.config-group {
+  grid-column: 1 / -1;
+}
+
+.config-group-title {
+  margin: 4px 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.config-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.config-field {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fafbfe;
+}
+
+.config-field.full {
+  grid-column: 1 / -1;
+}
+
+.config-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.config-field .config-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0 0;
+  line-height: 1.45;
+}
+
+.config-field input[type="text"],
+.config-field input[type="number"],
+.config-field select,
+.config-field textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  min-width: 0;
+}
+
+.config-field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.config-field input:focus,
+.config-field select:focus,
+.config-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 配置中的布尔开关复用安全词开关风格 */
+.config-field .toggle-switch {
+  appearance: none;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.18s ease, color 0.18s ease, transform 0.06s ease;
+}
+
+.config-field .toggle-switch:hover {
+  background: var(--accent-soft);
+}
+
+.config-field .toggle-switch:active {
+  transform: scale(0.97);
+}
+
+.config-field .toggle-switch.on {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* ── 深色模式细节修正 ───────────────────────── */
+[data-theme="dark"] .search,
+[data-theme="dark"] .config-field,
+[data-theme="dark"] .term-item {
+  background: var(--surface);
+}
+
+[data-theme="dark"] .r18-row {
+  background: #2a1f20;
+  border-color: #5c3a38;
+}
+
+[data-theme="dark"] .r18-row small,
+[data-theme="dark"] .config-field .config-hint {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .toast {
+  background: #e6e9f2;
+  color: #171a21;
 }
 
 @media (max-width: 640px) {
