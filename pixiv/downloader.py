@@ -408,24 +408,6 @@ class ImageDownloader:
         raise RuntimeError("无可下载 URL")
 
 
-def _quality_from_url(url: str) -> str:
-    return (
-        "original"
-        if "original" in url
-        else "large"
-        if "large" in url
-        else "square_medium"
-        if "square_medium" in url
-        else "medium"
-        if "medium" in url
-        else "square_medium"
-    )
-
-
-def pick_image_url(illust: dict, quality: str = "original") -> str:
-    return next((url for _, url in iter_image_quality_urls(illust, quality)), "")
-
-
 def iter_image_quality_urls(
     illust: dict, quality: str = "original"
 ) -> Iterable[tuple[str, str]]:

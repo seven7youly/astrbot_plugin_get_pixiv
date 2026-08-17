@@ -2,7 +2,7 @@ name: astrbot_plugin_get_pixiv
 display_name: 星绘漫游
 short_desc: Lolicon 优先、Pixiv 可选回退的安全发图插件
 desc: 通过 Lolicon 标签搜索或随机获取插画（默认仅普通分级，可配置允许 R18；内置安全词支持逐词单独开关，可在插件 WebUI「内容安全设置」中管理，也可用 /pv 安全词 查看；末尾加 r18 可单次取消 R18 限制），失败时可用 Pixiv refresh_token 回退到搜索或推荐作品。支持内容安全过滤、发图去重、请求频率限制和自然语言自动触发。
-version: v2.0.2Beta3
+version: v2.0.3Beta
 author: Sham1k0
 repo: https://github.com/shitianyaa/astrbot_plugin_get_pixiv
 astrbot_version: ">=4.16"

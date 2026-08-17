@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-import re
 
 from astrbot.api.all import logger
 from astrbot.api.event import AstrMessageEvent
@@ -21,16 +20,6 @@ LOG_PREFIX = "[GetPx]"
 
 class FiltersMixin:
     """Pixiv content filters, blacklist checks and deduplicated selection."""
-
-    @staticmethod
-    def _split_config_tags(value: object) -> list[str]:
-        if not isinstance(value, str):
-            return []
-        return [
-            tag.strip()
-            for tag in re.split(r"[,\uFF0C、;\uFF1B\r\n]+", value)
-            if tag.strip()
-        ]
 
     def _enabled_builtin_safety_terms(self) -> set[str]:
         enabled: set[str] = set()
@@ -65,20 +54,6 @@ class FiltersMixin:
     def _allow_r18(self) -> bool:
         return self._cfg_bool("allow_r18", False)
 
-    async def _blacklist_reason_for_illust(
-        self, illust: dict, illust_id: str = ""
-    ) -> str:
-        illust_id = str(illust_id or illust.get("id") or "")
-        if not self._allow_r18() and int(illust.get("x_restrict", 0) or 0) != 0:
-            return f"作品 {illust_id or '-'} 不符合内容安全要求"
-        matched_tag = self._matched_safety_term(illust, await self._safety_terms())
-        if matched_tag:
-            return f"作品 {illust_id or '-'} 命中内容安全词 {matched_tag}"
-        for candidate_id in self._illust_blacklist_ids(illust, illust_id):
-            if await self._is_blacklisted_illust(candidate_id):
-                return f"作品 {illust_id} 已在黑名单中"
-        return ""
-
     @staticmethod
     def _illust_blacklist_ids(illust: dict, illust_id: str = "") -> set[str]:
         return {
@@ -90,12 +65,6 @@ class FiltersMixin:
             )
             if value
         }
-
-    def _filter_safe_rating(self, illusts: list[dict]) -> list[dict]:
-        """Only allow Pixiv works explicitly marked as general audience."""
-        if self._allow_r18():
-            return list(illusts)
-        return [i for i in illusts if int(i.get("x_restrict", 0) or 0) == 0]
 
     @staticmethod
     def _filter_manga(illusts: list[dict]) -> list[dict]:
@@ -124,15 +93,6 @@ class FiltersMixin:
             and (allow_r18 or int(illust.get("x_restrict", 0) or 0) == 0)
             and not self._matched_safety_term(illust, safety_terms)
         ]
-
-    async def _is_blacklisted_illust(self, illust_id: str) -> bool:
-        if self.image_index is None or not illust_id:
-            return False
-        try:
-            return await self.image_index.is_blacklisted(illust_id)
-        except Exception as e:
-            logger.error(f"{LOG_PREFIX} 读取图片黑名单失败: {type(e).__name__}")
-            return True
 
     async def _pick_illusts(
         self,

@@ -49,14 +49,6 @@ def normalize_safety_text(value: object) -> str:
     return re.sub(r"[\s_\-‐‑‒–—―·・.]+", "", text)
 
 
-def normalized_builtin_terms() -> frozenset[str]:
-    return frozenset(
-        normalized
-        for term in BUILTIN_SAFETY_TERMS
-        if (normalized := normalize_safety_text(term))
-    )
-
-
 def safety_term_config_key(term: str) -> str:
     return f"safety_term_{term}"
 

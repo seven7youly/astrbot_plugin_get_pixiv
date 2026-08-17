@@ -35,6 +35,7 @@ from .pixiv.client import PixivClient
 from .pixiv.constants import MAX_IMAGE_COUNT
 from .pixiv.downloader import ImageDownloader
 from .pixiv.index import ImageIndexStore
+from .pixiv.llm import LlmMixin
 from .pixiv.lolicon import LoliconClient
 from .pixiv.safety import BUILTIN_SAFETY_TERMS, safety_term_config_key
 from .plugin_api import PluginWebApi
@@ -45,7 +46,7 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v2.0.2Beta3"
+PLUGIN_VERSION = "v2.0.3Beta"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
@@ -70,7 +71,7 @@ CHINESE_NUMBER_MAP = {
 # ──────────────────────────────────────────────────────────────────────
 
 
-class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
+class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context, config)
         self.config = config
@@ -367,14 +368,21 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, Star):
                 "⚠️ 图片源暂不可用，请配置 Lolicon API，或填写 pixiv_refresh_token 作为回退"
             )
             return
-        async for result in self._handle_search(
-            event,
-            tag=str(tag or "").strip(),
-            count_str=str(count or "1").strip(),
-            record_conversation=False,
-            tag_retry_enabled=True,
-        ):
-            yield result
+        try:
+            async for result in self._handle_search(
+                event,
+                tag=str(tag or "").strip(),
+                count_str=str(count or "1").strip(),
+                record_conversation=False,
+                tag_retry_enabled=True,
+            ):
+                yield result
+        except Exception as exc:
+            logger.error(
+                f"{LOG_PREFIX} search_images 工具执行异常: "
+                f"error_type={type(exc).__name__} error={exc}"
+            )
+            yield event.plain_result("⚠️ 发图服务执行出错，请稍后再试")
 
     # ──────────────────────────────────────────────────────────────
     # 工具方法
