@@ -216,20 +216,12 @@ class SearchMixin:
         )
         return text
 
-    async def _record_conversation(
-        self,
-        event: AstrMessageEvent,
-        tag: str,
-        count: int,
-        sent_illust_ids: set[str],
-        downloaded: list[tuple[dict, str, str, int]],
-        description: str = "",
+    async def _record_message_pair(
+        self, event: AstrMessageEvent, user_text: str, assistant_text: str
     ) -> None:
-        """把本次发图写入 AstrBot 对话历史，让大模型/AI 能看到插件发送的消息。
-
-        若该会话尚无对话记录，会自动新建一条对话，保证发送结果与图片描述
-        总能持久写入（如无会话记录则大模型后续无法“看到”图片内容）。
-        """
+        """把一组「用户请求 / 助手回复」写入 AstrBot 对话历史（无会话则自动新建）。"""
+        if not self._cfg_bool("record_message_to_conversation", True):
+            return
         try:
             conversation_manager = getattr(self, "context", None)
             if conversation_manager is None:
@@ -242,15 +234,7 @@ class SearchMixin:
             if not cid:
                 try:
                     cid = await conv_mgr.new_conversation(umo)
-                    logger.debug(
-                        f"{LOG_PREFIX} 会话无对话记录，已自动新建对话: "
-                        f"cid={cid}"
-                    )
-                except Exception as exc:
-                    logger.debug(
-                        f"{LOG_PREFIX} 新建对话失败，跳过记录: "
-                        f"error_type={type(exc).__name__}"
-                    )
+                except Exception:
                     return
             from astrbot.core.agent.message import (
                 AssistantMessageSegment,
@@ -258,13 +242,6 @@ class SearchMixin:
                 UserMessageSegment,
             )
 
-            user_text = f"请求发图（标签：{tag or '随机'}，数量：{count}）"
-            sent_ids = sorted(sent_illust_ids)
-            assistant_text = (
-                f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）"
-            )
-            if description:
-                assistant_text += f"\n图片内容描述：{description}"
             await conv_mgr.add_message_pair(
                 cid=cid,
                 user_message=UserMessageSegment(content=[TextPart(text=user_text)]),
@@ -272,16 +249,32 @@ class SearchMixin:
                     content=[TextPart(text=assistant_text)]
                 ),
             )
-            logger.info(
-                f"{LOG_PREFIX} 已记录发图消息到对话历史: cid={cid} "
-                f"sent_count={len(sent_ids)} "
-                f"has_description={'yes' if description else 'no'}"
-            )
-        except Exception as exc:
-            logger.warning(
-                f"{LOG_PREFIX} 记录发图消息到对话历史失败: "
-                f"error_type={type(exc).__name__}"
-            )
+        except Exception:
+            return
+
+    async def _record_conversation(
+        self,
+        event: AstrMessageEvent,
+        tag: str,
+        count: int,
+        sent_illust_ids: set[str],
+        downloaded: list[tuple[dict, str, str, int]],
+        description: str = "",
+    ) -> None:
+        """把本次发图结果（含图片描述）写入 AstrBot 对话历史。"""
+        user_text = f"请求发图（标签：{tag or '随机'}，数量：{count}）"
+        sent_ids = sorted(sent_illust_ids)
+        assistant_text = (
+            f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）"
+        )
+        if description:
+            assistant_text += f"\n图片内容描述：{description}"
+        await self._record_message_pair(event, user_text, assistant_text)
+        logger.info(
+            f"{LOG_PREFIX} 已记录发图消息到对话历史: "
+            f"sent_count={len(sent_ids)} "
+            f"has_description={'yes' if description else 'no'}"
+        )
 
     def _get_image_caption_provider_id(self) -> str:
         """读取 AstrBot 配置的默认图片转述模型 provider_id。"""
@@ -337,67 +330,97 @@ class SearchMixin:
         except Exception:
             return ""
 
-    async def _record_reply(
-        self, event: AstrMessageEvent, user_text: str, reply_text: str
-    ) -> None:
-        """把插件提示/回复写入 AstrBot 对话历史，让大模型/AI 能看到。"""
-        if not self._cfg_bool("record_message_to_conversation", True):
-            return
-        try:
-            conversation_manager = getattr(self, "context", None)
-            if conversation_manager is None:
-                return
-            conv_mgr = getattr(conversation_manager, "conversation_manager", None)
-            if conv_mgr is None:
-                return
-            umo = event.unified_msg_origin
-            cid = await conv_mgr.get_curr_conversation_id(umo)
-            if not cid:
-                try:
-                    cid = await conv_mgr.new_conversation(umo)
-                except Exception:
-                    return
-            from astrbot.core.agent.message import (
-                AssistantMessageSegment,
-                TextPart,
-                UserMessageSegment,
-            )
+    async def _push_to_agent(self, event: AstrMessageEvent, note: str) -> str:
+        """把场景推送给 AstrBot 主 Agent，让其按人格与上下文回复并写入对话历史。
 
-            await conv_mgr.add_message_pair(
-                cid=cid,
-                user_message=UserMessageSegment(content=[TextPart(text=user_text)]),
-                assistant_message=AssistantMessageSegment(
-                    content=[TextPart(text=reply_text)]
-                ),
+        返回最终回复文本；无模型或异常时返回空串，由调用方用默认文案兜底。
+        """
+        try:
+            from astrbot.core.astr_main_agent import (
+                MainAgentBuildConfig,
+                _get_session_conv,
+                build_main_agent,
             )
-        except Exception:
-            return
+            from astrbot.core.cron.events import CronMessageEvent
+            from astrbot.core.platform.message_session import MessageSession
+            from astrbot.core.provider.entities import ProviderRequest, ProviderType
+
+            ctx = getattr(self, "context", None)
+            if ctx is None:
+                return ""
+            get_config = getattr(ctx, "get_config", None)
+            if not callable(get_config):
+                return ""
+            umo = event.unified_msg_origin
+            cfg = get_config(umo=umo) or {}
+            provider_settings = cfg.get("provider_settings") or {}
+            provider_manager = getattr(ctx, "provider_manager", None)
+            if provider_manager is None:
+                return ""
+            # 无可用对话模型时直接兜底（不触发 Agent）
+            if (
+                provider_manager.get_using_provider(
+                    provider_type=ProviderType.CHAT_COMPLETION, umo=umo
+                )
+                is None
+            ):
+                return ""
+
+            session = MessageSession.from_str(umo)
+            cron_event = CronMessageEvent(
+                context=ctx,
+                session=session,
+                message=note,
+                message_type=session.message_type,
+            )
+            config = MainAgentBuildConfig(
+                tool_call_timeout=120,
+                streaming_response=provider_settings.get("stream", False),
+                provider_settings=provider_settings,
+            )
+            conv = await _get_session_conv(event=cron_event, plugin_context=ctx)
+            before_history = conv.history
+            req = ProviderRequest()
+            req.conversation = conv
+            req.contexts = json.loads(conv.history) if conv.history else []
+            req.prompt = note
+            req.image_urls = []
+            req.audio_urls = []
+            req.func_tool = None  # 状态提示不调用工具，避免递归
+
+            result = await build_main_agent(
+                event=cron_event, plugin_context=ctx, config=config, req=req
+            )
+            if not result:
+                return ""
+            runner = result.agent_runner
+            async for _ in runner.step_until_done(30):
+                pass
+            llm_resp = runner.get_final_llm_resp()
+            text = (getattr(llm_resp, "completion_text", "") or "").strip()
+            if not text:
+                return ""
+            # 若 Agent 未把本轮写入对话历史，则由插件补齐，保证回复被记忆
+            if conv.history == before_history:
+                await self._record_message_pair(event, note, text)
+            return text
+        except Exception as exc:
+            logger.debug(
+                f"{LOG_PREFIX} 推送主 Agent 回复失败，使用默认文案: "
+                f"error_type={type(exc).__name__}"
+            )
+            return ""
 
     async def _reply(
-        self,
-        event: AstrMessageEvent,
-        fallback: str,
-        context: str = "",
-        user_text: str = "",
-        record: bool = True,
+        self, event: AstrMessageEvent, fallback: str, context: str = ""
     ) -> str:
-        """按当前会话大模型的人格改写回复；未开启或调用失败时返回默认文案。
-
-        开启记录时（record=True），改写后的回复会一并写入 AstrBot 对话历史。
-        """
-        text = fallback
-        if self._cfg_bool("llm_natural_replies", True):
-            prompt = (
-                "你是当前会话的机器人角色。下面是一条本应由插件输出的功能提示，"
-                "请用符合你人格设定的自然口语改写为一句（不超过 30 字），保留原意，"
-                "不要解释、引号、Markdown 或多余文字。\n"
-                f"提示：{fallback}\n"
-                f"背景：{context or '发图相关提示'}"
-            )
-            text = (await self._llm_generate_text(event, prompt)) or fallback
-        if record and user_text and text:
-            await self._record_reply(event, user_text, text)
-        return text
+        """把提示推送给 AstrBot 主 Agent 自然回复；关闭/无模型/失败时返回默认文案。"""
+        if not self._cfg_bool("llm_natural_replies", True):
+            return fallback
+        note = fallback
+        if context:
+            note += f"\n背景：{context}"
+        return (await self._push_to_agent(event, note)) or fallback
 
     async def _optimize_search_tag(self, event: AstrMessageEvent, tag: str) -> str:
         """让大模型优化/改写搜索标签（如翻译为日语）；失败返回空串。"""
@@ -521,11 +544,7 @@ class SearchMixin:
             )
             yield event.plain_result(
                 await self._reply(
-                    event,
-                    f"⏳ 请求太频繁，请 {wait} 秒后再试",
-                    "频率限制",
-                    f"请求发图（标签：{tag or '随机'}，数量：{count_str or 1}）",
-                    record_conversation,
+                    event, f"⏳ 请求太频繁，请 {wait} 秒后再试", "频率限制"
                 )
             )
             return
@@ -574,8 +593,6 @@ class SearchMixin:
                     event,
                     self._search_failure_message(reason),
                     f"标签：{search_tag or '随机'}",
-                    f"请求发图（标签：{tag or '随机'}，数量：{count}）",
-                    record_conversation,
                 )
             )
             return
@@ -598,11 +615,7 @@ class SearchMixin:
             except Exception:
                 yield event.plain_result(
                     await self._reply(
-                        event,
-                        "图片去重索引更新失败，请稍后重试",
-                        "去重索引",
-                        f"请求发图（标签：{tag or '随机'}，数量：{count}）",
-                        record_conversation,
+                        event, "图片去重索引更新失败，请稍后重试", "去重索引"
                     )
                 )
                 return
@@ -621,8 +634,6 @@ class SearchMixin:
                     event,
                     "当前去重范围内没有未发送过的图片了，换个标签或稍后再试",
                     "发图去重",
-                    f"请求发图（标签：{tag or '随机'}，数量：{count}）",
-                    record_conversation,
                 )
             )
             return
@@ -673,11 +684,7 @@ class SearchMixin:
             if not downloaded:
                 yield event.plain_result(
                     await self._reply(
-                        event,
-                        "😢 所有图片均下载失败，请稍后再试",
-                        "图片下载",
-                        f"请求发图（标签：{tag or '随机'}，数量：{count}）",
-                        record_conversation,
+                        event, "😢 所有图片均下载失败，请稍后再试", "图片下载"
                     )
                 )
                 return
