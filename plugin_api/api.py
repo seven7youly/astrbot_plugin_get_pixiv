@@ -8,7 +8,6 @@ from quart import jsonify, request
 from ..pixiv.safety import (
     BUILTIN_SAFETY_TERMS,
     normalize_safety_text,
-    safety_term_config_key,
 )
 
 
@@ -66,7 +65,7 @@ CONFIG_META: dict[str, dict] = {
     "image_quality": {
         "label": "图片质量",
         "type": "select",
-        "default": "large",
+        "default": "original",
         "options": ["original", "large", "medium"],
     },
     "auto_downgrade_original_mb": {
@@ -108,14 +107,14 @@ CONFIG_META: dict[str, dict] = {
     "llm_describe_images": {
         "label": "发送后让大模型查看图片",
         "type": "bool",
-        "default": False,
+        "default": True,
         "group": "llm",
         "hint": "需多模态大模型；描述只写入对话历史，不发送到聊天框。",
     },
     "llm_describe_prompt": {
         "label": "图片描述提示词",
         "type": "text",
-        "default": "请简要描述这张图片的内容、构图与氛围，用中文，不超过 80 字。",
+        "default": "Please briefly describe the content and atmosphere of this image. If there are people in the image, please describe their actions, expressions, postures, clothing, and facial expressions in detail.",
         "group": "llm",
     },
     "llm_search_tag_retries": {
@@ -165,18 +164,6 @@ class PluginWebApi:
                 "Get content safety policy and term states",
             ),
             (
-                "content-safety/r18-toggle",
-                self.content_safety_r18_toggle,
-                ["POST"],
-                "Toggle the global R18 allowance",
-            ),
-            (
-                "content-safety/terms/toggle",
-                self.content_safety_term_toggle,
-                ["POST"],
-                "Toggle a built-in safety term",
-            ),
-            (
                 "content-safety/terms/add",
                 self.content_safety_term_add,
                 ["POST"],
@@ -218,82 +205,17 @@ class PluginWebApi:
             return self._unavailable("内容安全数据尚未初始化")
         try:
             custom_terms = await self.plugin.image_index.list_safety_terms()
-            builtin_terms = [
-                {
-                    "term": term,
-                    "enabled": self.plugin._cfg_bool(
-                        safety_term_config_key(term), True
-                    ),
-                }
-                for term in BUILTIN_SAFETY_TERMS
-            ]
             return jsonify(
                 {
                     "success": True,
                     "rating_policy": "general_only",
-                    "rating_label": "仅允许普通作品（allow_r18 可配置开启 R18）",
-                    "allow_r18": self.plugin._cfg_bool("allow_r18", False),
-                    "builtin_terms": builtin_terms,
+                    "rating_label": "🔞 仅发送全年龄段图片",
+                    "builtin_terms": list(BUILTIN_SAFETY_TERMS),
                     "custom_terms": custom_terms,
                 }
             )
         except Exception as exc:
             return self.internal_error("读取内容安全策略", exc)
-
-    async def content_safety_r18_toggle(self):
-        payload = await self._request_json_object()
-        if payload is None:
-            return jsonify({"success": False, "error": "请求内容必须是对象"}), 400
-        if not isinstance(payload.get("enabled"), bool):
-            return jsonify({"success": False, "error": "enabled 必须是布尔值"}), 400
-        enabled = payload["enabled"]
-        config = self.plugin.config
-        config["allow_r18"] = enabled
-        persisted = False
-        save_config = getattr(config, "save_config", None)
-        if callable(save_config):
-            try:
-                save_config()
-                persisted = True
-            except Exception as exc:
-                logger.warning(
-                    f"{self.log_prefix} 保存 R18 开关状态失败: "
-                    f"enabled={enabled} error_type={type(exc).__name__}"
-                )
-        logger.info(
-            f"{self.log_prefix} R18 开关状态已更新: "
-            f"enabled={enabled} persisted={persisted}"
-        )
-        return jsonify({"success": True, "enabled": enabled})
-
-    async def content_safety_term_toggle(self):
-        payload = await self._request_json_object()
-        if payload is None:
-            return jsonify({"success": False, "error": "请求内容必须是对象"}), 400
-        term = str(payload.get("term") or "").strip()
-        if term not in BUILTIN_SAFETY_TERMS:
-            return jsonify({"success": False, "error": "未知的内置安全词"}), 400
-        if not isinstance(payload.get("enabled"), bool):
-            return jsonify({"success": False, "error": "enabled 必须是布尔值"}), 400
-        enabled = payload["enabled"]
-        config = self.plugin.config
-        config[safety_term_config_key(term)] = enabled
-        persisted = False
-        save_config = getattr(config, "save_config", None)
-        if callable(save_config):
-            try:
-                save_config()
-                persisted = True
-            except Exception as exc:
-                logger.warning(
-                    f"{self.log_prefix} 保存安全词开关状态失败: "
-                    f"term={term} error_type={type(exc).__name__}"
-                )
-        logger.info(
-            f"{self.log_prefix} 安全词状态已更新: "
-            f"term={term} enabled={enabled} persisted={persisted}"
-        )
-        return jsonify({"success": True, "term": term, "enabled": enabled})
 
     async def content_safety_term_add(self):
         if self.plugin.image_index is None:

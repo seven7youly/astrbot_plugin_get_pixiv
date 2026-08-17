@@ -261,7 +261,7 @@ class LlmMixin:
             return ""
         base_prompt = self._cfg_str(
             "llm_describe_prompt",
-            "请简要描述这张图片的内容、构图与氛围，用中文，不超过 80 字。",
+            "Please briefly describe the content and atmosphere of this image. If there are people in the image, please describe their actions, expressions, postures, clothing, and facial expressions in detail.",
         )
         tag_clean = str(tag or "").strip()
         if tag_clean:

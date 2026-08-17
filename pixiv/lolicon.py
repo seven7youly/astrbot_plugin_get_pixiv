@@ -19,7 +19,6 @@ class LoliconClient:
 
     api_url: str = DEFAULT_API_URL
     exclude_ai: bool = True
-    allow_r18: bool = False
     request_timeout: float = 30.0
     _session: aiohttp.ClientSession | None = field(default=None, repr=False)
     _closed: bool = field(default=False, repr=False)
@@ -41,13 +40,11 @@ class LoliconClient:
         tag: str = "",
         count: int = 20,
         aspect_ratio: str = "",
-        allow_r18: bool | None = None,
     ) -> list[dict[str, Any]]:
         if not self.available:
             raise RuntimeError("Lolicon API 未配置")
-        effective_r18 = self.allow_r18 if allow_r18 is None else allow_r18
         params: list[tuple[str, str]] = [
-            ("r18", "1" if effective_r18 else "0"),
+            ("r18", "0"),  # 平台管控：始终只取全年龄段
             ("num", str(max(1, min(int(count), 20)))),
             ("excludeAI", "true" if self.exclude_ai else "false"),
         ]
@@ -70,16 +67,14 @@ class LoliconClient:
         return [self._normalize(item) for item in payload.get("data") or []]
 
     async def search(
-        self, tag: str, *, count: int = 20, aspect_ratio: str = "", allow_r18: bool | None = None
+        self, tag: str, *, count: int = 20, aspect_ratio: str = ""
     ) -> list[dict[str, Any]]:
-        return await self.fetch(
-            tag=tag, count=count, aspect_ratio=aspect_ratio, allow_r18=allow_r18
-        )
+        return await self.fetch(tag=tag, count=count, aspect_ratio=aspect_ratio)
 
     async def random(
-        self, *, count: int = 20, aspect_ratio: str = "", allow_r18: bool | None = None
+        self, *, count: int = 20, aspect_ratio: str = ""
     ) -> list[dict[str, Any]]:
-        return await self.fetch(count=count, aspect_ratio=aspect_ratio, allow_r18=allow_r18)
+        return await self.fetch(count=count, aspect_ratio=aspect_ratio)
 
     @staticmethod
     def _normalize(item: dict[str, Any]) -> dict[str, Any]:

@@ -77,26 +77,21 @@ class SearchMixin:
         offset: int = 0,
         aspect_ratio: str = "",
         use_page_cursor: bool = True,
-        allow_r18: bool | None = None,
-        source_key_suffix: str = "",
     ) -> tuple[list[dict], int, str]:
-        """优先请求 Lolicon，失败后按有无标签回退 Pixiv。"""
+        """优先请求 Lolicon（仅全年龄段），失败后按有无标签回退 Pixiv。"""
         lolicon_client = getattr(self, "lolicon_client", None)
         if lolicon_client and lolicon_client.available:
             try:
                 if tag:
                     illusts = await lolicon_client.search(
-                        tag,
-                        count=count,
-                        aspect_ratio=aspect_ratio,
-                        allow_r18=allow_r18,
+                        tag, count=count, aspect_ratio=aspect_ratio
                     )
-                    source_key = self._source_key(tag, "lolicon") + source_key_suffix
+                    source_key = self._source_key(tag, "lolicon")
                 else:
                     illusts = await lolicon_client.random(
-                        count=count, aspect_ratio=aspect_ratio, allow_r18=allow_r18
+                        count=count, aspect_ratio=aspect_ratio
                     )
-                    source_key = "lolicon:random" + source_key_suffix
+                    source_key = "lolicon:random"
                 if illusts:
                     return illusts, len(illusts), source_key
             except Exception as exc:
@@ -108,7 +103,7 @@ class SearchMixin:
 
         pixiv_source_key = (
             self._source_key(tag, "pixiv") if tag else "pixiv:recommended"
-        ) + source_key_suffix
+        )
         page_offset = offset
         if use_page_cursor and page_offset == 0 and self.image_index is not None:
             try:
@@ -180,8 +175,6 @@ class SearchMixin:
         tag: str,
         *,
         count: int,
-        allow_r18: bool,
-        source_key_suffix: str,
         tag_retry_enabled: bool = False,
         tag_retry_limit: int = 0,
     ) -> tuple[list[dict], str, int, str, str]:
@@ -219,8 +212,6 @@ class SearchMixin:
                 event,
                 current_tag,
                 count=count,
-                allow_r18=allow_r18,
-                source_key_suffix=source_key_suffix,
             )
             if not illusts:
                 reason = "no_results"
@@ -237,9 +228,7 @@ class SearchMixin:
                     continue
 
             try:
-                illusts = await self._filter_blacklisted_illusts(
-                    illusts, allow_r18=allow_r18
-                )
+                illusts = await self._filter_blacklisted_illusts(illusts)
             except RuntimeError:
                 return [], "", 0, current_tag, "safety_error"
             if not illusts:
@@ -268,11 +257,10 @@ class SearchMixin:
         tag: str,
         count_str: str,
         *,
-        allow_r18_override: bool = False,
         record_conversation: bool = True,
         tag_retry_enabled: bool = False,
     ):
-        """搜索并发送图片；Lolicon 失败时按需回退 Pixiv。"""
+        """搜索并发送图片（仅全年龄段）；Lolicon 失败时按需回退 Pixiv。"""
         # 频率限制
         wait = self._check_rate_limit(event.get_sender_id())
         if wait > 0:
@@ -295,12 +283,8 @@ class SearchMixin:
         except (TypeError, ValueError):
             count = 1
 
-        # R18：单次覆盖优先，否则跟随配置
-        r18_mode = allow_r18_override or self._cfg_bool("allow_r18", False)
-        source_key_suffix = ":r18" if allow_r18_override else ""
-
         timeout_sec = self._cfg_float("request_timeout", 30.0, 5.0, 120.0)
-        quality = self._cfg_str("image_quality", "large")
+        quality = self._cfg_str("image_quality", "original")
         downgrade_limit_mb = self._cfg_float(
             "auto_downgrade_original_mb",
             DEFAULT_AUTO_DOWNGRADE_ORIGINAL_LIMIT_MB,
@@ -320,8 +304,6 @@ class SearchMixin:
                 event,
                 tag,
                 count=max_count,
-                allow_r18=r18_mode,
-                source_key_suffix=source_key_suffix,
                 tag_retry_enabled=tag_retry_enabled,
                 tag_retry_limit=tag_retry_limit,
             )
@@ -340,7 +322,7 @@ class SearchMixin:
             f"tag_configured={'yes' if search_tag else 'no'} "
             f"source={_search_source_label(source_key)} "
             f"requested_count={count} quality={_search_quality_label(quality)} "
-            f"candidate_count={raw_count} r18={'yes' if r18_mode else 'no'}"
+            f"candidate_count={raw_count}"
         )
 
         pick_count = min(count, len(illusts))

@@ -182,57 +182,43 @@ body {
   filter: brightness(1.08);
 }
 
-.r18-row {
+.r18-banner {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   border: 1px solid #f3d2d0;
   background: #fef7f7;
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   margin-bottom: 16px;
 }
 
-.r18-row p {
-  margin: 0 0 2px;
-  font-size: 11px;
+.r18-banner span {
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.12em;
   color: var(--danger);
+  white-space: nowrap;
 }
 
-.r18-row h3 {
-  margin: 0 0 4px;
-  font-size: 16px;
-}
-
-.r18-row small {
+.r18-banner small {
   color: var(--muted);
   font-size: 13px;
-  display: block;
 }
 
-.safety-toggle.r18 {
-  border-color: var(--danger);
-  background: transparent;
-  color: var(--danger);
-  flex-shrink: 0;
+.safety-chip {
+  display: inline-block;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.safety-toggle.r18:hover {
-  background: #fdecea;
-}
-
-.safety-toggle.r18.on {
-  background: var(--danger);
-  color: #ffffff;
-}
-
-.safety-toggle.r18.on:hover {
-  background: var(--danger);
-  color: #ffffff;
-  filter: brightness(1.08);
+[data-theme="dark"] .r18-banner {
+  background: #2a1f20;
+  border-color: #5c3a38;
 }
 
 .empty {
@@ -584,12 +570,12 @@ body {
   background: var(--surface);
 }
 
-[data-theme="dark"] .r18-row {
+[data-theme="dark"] .r18-banner {
   background: #2a1f20;
   border-color: #5c3a38;
 }
 
-[data-theme="dark"] .r18-row small,
+[data-theme="dark"] .r18-banner small,
 [data-theme="dark"] .config-field .config-hint {
   color: var(--muted);
 }

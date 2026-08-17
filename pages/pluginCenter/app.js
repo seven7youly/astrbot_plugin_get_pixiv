@@ -3,10 +3,7 @@ const bridge = window.AstrBotPluginPage;
 const state = {
   builtinTerms: [],
   customTerms: [],
-  allowR18: false,
   loaded: false,
-  pendingToggle: new Set(),
-  pendingR18: false,
   config: {},
   configSchema: {},
 };
@@ -24,7 +21,6 @@ const els = {
   termForm: $("termForm"),
   termInput: $("termInput"),
   termError: $("termError"),
-  r18Toggle: $("r18Toggle"),
   configForm: $("configForm"),
   configSaveBtn: $("configSaveBtn"),
   llmConfigForm: $("llmConfigForm"),
@@ -80,25 +76,14 @@ function setButtonBusy(button, busy, busyLabel, idleLabel) {
 function renderSafety() {
   const query = els.builtinSearch.value.trim().toLocaleLowerCase("zh-CN");
   const builtin = state.builtinTerms.filter((item) =>
-    String(item.term).toLocaleLowerCase("zh-CN").includes(query)
+    String(item).toLocaleLowerCase("zh-CN").includes(query)
   );
-  const enabledCount = state.builtinTerms.filter((item) => item.enabled).length;
-  els.builtinCount.textContent = `${state.builtinTerms.length} 项 · 启用 ${enabledCount}`;
+  els.builtinCount.textContent = `${state.builtinTerms.length} 项 · 系统内置`;
   els.customCount.textContent = `${state.customTerms.length} 项`;
 
-  renderR18Toggle();
   els.builtinTerms.innerHTML = builtin.length
-    ? builtin.map((item) => `
-        <button class="safety-toggle${item.enabled ? " on" : ""}"
-          type="button"
-          data-term="${escapeHtml(item.term)}"
-          aria-pressed="${item.enabled ? "true" : "false"}">${escapeHtml(item.term)}</button>
-      `).join("")
+    ? builtin.map((item) => `<span class="safety-chip">${escapeHtml(item)}</span>`).join("")
     : '<div class="empty">没有匹配的内置安全词</div>';
-
-  els.builtinTerms.querySelectorAll("[data-term]").forEach((button) => {
-    button.addEventListener("click", () => toggleBuiltinTerm(button));
-  });
 
   els.customTerms.innerHTML = state.customTerms.length
     ? state.customTerms.map((item) => `
@@ -134,70 +119,11 @@ function formatDate(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function renderR18Toggle() {
-  els.r18Toggle.classList.toggle("on", state.allowR18);
-  els.r18Toggle.setAttribute("aria-pressed", String(state.allowR18));
-}
-
-async function toggleR18() {
-  if (state.pendingR18) return;
-  state.pendingR18 = true;
-  const nextEnabled = !state.allowR18;
-
-  // 立即切换 class 并输出当前状态
-  state.allowR18 = nextEnabled;
-  renderR18Toggle();
-  console.log(`[safety-toggle] R18 -> ${nextEnabled ? "ON" : "OFF"}`, {
-    allowR18: nextEnabled,
-  });
-
-  try {
-    await apiPost("content-safety/r18-toggle", { enabled: nextEnabled });
-    showToast(`R18 内容${nextEnabled ? "已允许" : "已限制"}`);
-  } catch (error) {
-    state.allowR18 = !nextEnabled;
-    renderR18Toggle();
-    showToast(error.message, "error");
-  } finally {
-    state.pendingR18 = false;
-  }
-}
-
-async function toggleBuiltinTerm(button) {
-  const term = button.dataset.term;
-  const item = state.builtinTerms.find((entry) => entry.term === term);
-  if (!item || state.pendingToggle.has(term)) return;
-  state.pendingToggle.add(term);
-  const nextEnabled = !item.enabled;
-
-  // 立即切换 class 并输出当前状态
-  button.classList.toggle("on", nextEnabled);
-  button.setAttribute("aria-pressed", String(nextEnabled));
-  console.log(`[safety-toggle] ${term} -> ${nextEnabled ? "ON" : "OFF"}`, {
-    term,
-    enabled: nextEnabled,
-  });
-  item.enabled = nextEnabled;
-
-  try {
-    await apiPost("content-safety/terms/toggle", { term, enabled: nextEnabled });
-    renderSafety();
-    showToast(`安全词「${term}」已${nextEnabled ? "启用" : "停用"}`);
-  } catch (error) {
-    item.enabled = !nextEnabled;
-    renderSafety();
-    showToast(error.message, "error");
-  } finally {
-    state.pendingToggle.delete(term);
-  }
-}
-
 async function loadSafety() {
   try {
     const result = await apiGet("content-safety");
     state.builtinTerms = Array.isArray(result.builtin_terms) ? result.builtin_terms : [];
     state.customTerms = Array.isArray(result.custom_terms) ? result.custom_terms : [];
-    state.allowR18 = Boolean(result.allow_r18);
     state.loaded = true;
     hideGlobalError();
     renderSafety();
@@ -354,7 +280,6 @@ function bindEvents() {
     button.addEventListener("click", () => switchView(button.dataset.view));
   });
   els.builtinSearch.addEventListener("input", renderSafety);
-  els.r18Toggle.addEventListener("click", toggleR18);
   els.configSaveBtn.addEventListener("click", () => saveConfig(els.configSaveBtn));
   els.llmConfigSaveBtn.addEventListener("click", () => saveConfig(els.llmConfigSaveBtn));
   els.retryBtn.addEventListener("click", async () => {

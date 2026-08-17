@@ -1,10 +1,10 @@
 """AstrBot 插件 — 安全插画发图
 
-通过标签搜索插画并发送图片，支持 Lolicon 主源、Pixiv 回退、内容安全过滤、去重和自然语言自动触发。
+通过标签搜索插画并发送图片（仅全年龄段），支持 Lolicon 主源、Pixiv 回退、
+内容安全过滤（系统内置安全词，不可关闭）、去重和自然语言自动触发。
 
 搜索指令：
     /pv [标签] [数量]           搜索并发送图片
-    /pv [标签] [数量] r18       单次取消 R18 限制（仅本次生效）
     /pv 安全词                  查看全部安全词
     /pv help                    查看指令帮助
 
@@ -37,7 +37,7 @@ from .pixiv.downloader import ImageDownloader
 from .pixiv.index import ImageIndexStore
 from .pixiv.llm import LlmMixin
 from .pixiv.lolicon import LoliconClient
-from .pixiv.safety import BUILTIN_SAFETY_TERMS, safety_term_config_key
+from .pixiv.safety import BUILTIN_SAFETY_TERMS
 from .plugin_api import PluginWebApi
 
 # ──────────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v2.0.3Beta"
+PLUGIN_VERSION = "v2.1.0"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
@@ -120,7 +120,6 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
             self.lolicon_client = LoliconClient(
                 api_url=lolicon_url,
                 exclude_ai=self._cfg_bool("lolicon_exclude_ai", True),
-                allow_r18=self._cfg_bool("allow_r18", False),
                 request_timeout=self._cfg_float(
                     "request_timeout", 30.0, 5.0, 120.0
                 ),
@@ -205,7 +204,7 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
 
     @filter.command("pv")
     async def cmd_pv(self, event: AstrMessageEvent, query: GreedyStr = GreedyStr):
-        """搜索并发送图片。参数: [标签] [数量]；末尾加 r18 单次取消 R18 限制；/pv 安全词 或 /pv help。"""
+        """搜索并发送图片。参数: [标签] [数量]；/pv 安全词 或 /pv help。"""
         event.stop_event()
         # 框架无参时传入空字符串；直接调用时则会保留默认哨兵。
         raw_query = "" if query is GreedyStr else str(query or "")
@@ -219,25 +218,13 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
             yield event.plain_result(await self._build_safety_words_text())
             return
 
-        # 末尾 r18：单次取消 R18 限制（仅本次指令生效）
-        allow_r18_override = False
-        tokens = trimmed.split()
-        if tokens and tokens[-1].casefold() == "r18":
-            allow_r18_override = True
-            trimmed = " ".join(tokens[:-1]).strip()
-
         if not self._ensure_client_or_error(event):
             yield event.plain_result(
                 "⚠️ 图片源暂不可用，请配置 Lolicon API，或填写 pixiv_refresh_token 作为回退"
             )
             return
         tag, count = self._split_tag_and_count(trimmed)
-        async for result in self._handle_search(
-            event,
-            tag=tag,
-            count_str=count,
-            allow_r18_override=allow_r18_override,
-        ):
+        async for result in self._handle_search(event, tag=tag, count_str=count):
             yield result
 
     @staticmethod
@@ -250,8 +237,6 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
             "    按标签搜索发图，如：/pv 初音ミク 3\n"
             "/pv [数量]\n"
             "    无标签时随机发图，如：/pv 5\n"
-            "/pv [标签] [数量] r18\n"
-            "    单次取消 R18 限制（仅本次生效），如：/pv 初音ミク 2 r18\n"
             "/pv 安全词\n"
             "    查看全部内置与自定义安全词\n"
             "/pv help\n"
@@ -259,7 +244,7 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
             "──────────────\n"
             "默认开启自然语言触发，可直接发送「来一份图」「来三张初音ミク图」等触发发图；\n"
             "接入大模型时，也可直接自然对话让 AI 调用发图（如「来张图」「发三张初音ミク的图」）。\n"
-            "安全词开关与自定义屏蔽词请在插件 WebUI「内容安全设置」中管理。"
+            "🔞 仅发送全年龄段图片；安全词为系统内置不可关闭，自定义屏蔽词请在插件 WebUI 中管理。"
         )
 
     @staticmethod
@@ -273,18 +258,11 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
         return " ".join(tokens), ""
 
     async def _build_safety_words_text(self) -> str:
-        """汇总内置安全词（含开关状态）与自定义安全词。"""
-        builtin_on: list[str] = []
-        builtin_off: list[str] = []
-        for term in BUILTIN_SAFETY_TERMS:
-            if self._cfg_bool(safety_term_config_key(term), True):
-                builtin_on.append(term)
-            else:
-                builtin_off.append(term)
-        lines = [f"🔒 内置安全词（{len(builtin_on) + len(builtin_off)}）："]
-        lines.append("✅ 启用：" + "、".join(builtin_on))
-        if builtin_off:
-            lines.append("❌ 停用：" + "、".join(builtin_off))
+        """汇总内置安全词（系统内置、不可关闭）与自定义安全词。"""
+        lines = [
+            f"🔒 内置安全词（{len(BUILTIN_SAFETY_TERMS)}，系统内置不可关闭）："
+        ]
+        lines.append("、".join(BUILTIN_SAFETY_TERMS))
         custom: list[str] = []
         if self.image_index is not None:
             try:

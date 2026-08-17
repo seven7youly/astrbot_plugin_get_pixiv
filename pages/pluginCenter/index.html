@@ -33,6 +33,10 @@
         <!-- 内容安全 -->
         <section id="safetyView" class="workspace active" aria-labelledby="builtinTitle">
           <section class="panel" aria-labelledby="builtinTitle">
+            <div class="r18-banner">
+              <span>🔞 R18 已限制</span>
+              <small>只发送全年龄段图片（平台管控，无法修改）</small>
+            </div>
             <div class="panel-title">
               <div>
                 <p>BUILT-IN TERMS</p>
@@ -40,16 +44,7 @@
               </div>
               <span id="builtinCount" class="count" aria-live="polite">加载中…</span>
             </div>
-
-            <div class="r18-row">
-              <div>
-                <p>R18 CONTENT</p>
-                <h3>🔞 R18 限制开关</h3>
-                <small>按下（填充红色）表示允许发送 R18 作品；未按下表示仅发送全年龄作品。相当于配置中的 allow_r18。</small>
-              </div>
-              <button id="r18Toggle" class="safety-toggle r18" type="button" aria-pressed="false">🔞 R18</button>
-            </div>
-
+            <p class="config-notice">以下为系统内置安全词，不可关闭（平台管控）。</p>
             <label for="builtinSearch" class="sr-only">搜索内置安全词</label>
             <input id="builtinSearch" class="search" type="search" autocomplete="off" spellcheck="false" placeholder="输入关键字筛选内置安全词…" />
             <div id="builtinTerms" class="toggle-grid" aria-live="polite"></div>

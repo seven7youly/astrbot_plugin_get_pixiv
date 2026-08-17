@@ -4,24 +4,10 @@ import re
 import unicodedata
 
 
+# 系统内置安全词（不可关闭、不可在配置/UI 中修改）
 BUILTIN_SAFETY_TERMS = (
-    "r18",
-    "r-18",
     "r18g",
     "r-18g",
-    "nsfw",
-    "裸体",
-    "全裸",
-    "裸露",
-    "露出",
-    "成人",
-    "色情",
-    "性交",
-    "性爱",
-    "性器",
-    "乳首",
-    "乳房",
-    "触手",
     "猎奇",
     "血腥",
     "断肢",
@@ -41,16 +27,15 @@ BUILTIN_SAFETY_TERMS = (
     "切断",
     "内臓",
     "死体",
+    "男の娘",
+    "美少年",
+    "femboy",
 )
 
 
 def normalize_safety_text(value: object) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).casefold()
     return re.sub(r"[\s_\-‐‑‒–—―·・.]+", "", text)
-
-
-def safety_term_config_key(term: str) -> str:
-    return f"safety_term_{term}"
 
 
 def match_safety_term(value: object, terms: set[str] | frozenset[str]) -> str:

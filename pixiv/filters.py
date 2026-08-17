@@ -11,7 +11,6 @@ from .safety import (
     illustration_texts,
     match_safety_term,
     normalize_safety_text,
-    safety_term_config_key,
 )
 
 
@@ -21,17 +20,12 @@ LOG_PREFIX = "[GetPx]"
 class FiltersMixin:
     """Pixiv content filters, blacklist checks and deduplicated selection."""
 
-    def _enabled_builtin_safety_terms(self) -> set[str]:
-        enabled: set[str] = set()
-        for term in BUILTIN_SAFETY_TERMS:
-            if self._cfg_bool(safety_term_config_key(term), True):
-                normalized = normalize_safety_text(term)
-                if normalized:
-                    enabled.add(normalized)
-        return enabled
-
     async def _safety_terms(self) -> set[str]:
-        terms = self._enabled_builtin_safety_terms()
+        terms = {
+            normalized
+            for term in BUILTIN_SAFETY_TERMS
+            if (normalized := normalize_safety_text(term))
+        }
         if self.image_index is None:
             return terms
         try:
@@ -51,9 +45,6 @@ class FiltersMixin:
                 return matched
         return ""
 
-    def _allow_r18(self) -> bool:
-        return self._cfg_bool("allow_r18", False)
-
     @staticmethod
     def _illust_blacklist_ids(illust: dict, illust_id: str = "") -> set[str]:
         return {
@@ -71,13 +62,9 @@ class FiltersMixin:
         """Filter out every Pixiv manga item."""
         return [il for il in illusts if il.get("type") != "manga"]
 
-    async def _filter_blacklisted_illusts(
-        self, illusts: list[dict], *, allow_r18: bool | None = None
-    ) -> list[dict]:
+    async def _filter_blacklisted_illusts(self, illusts: list[dict]) -> list[dict]:
         if not illusts:
             return illusts
-        if allow_r18 is None:
-            allow_r18 = self._allow_r18()
         safety_terms = await self._safety_terms()
         blacklisted: set[str] = set()
         try:
@@ -90,7 +77,7 @@ class FiltersMixin:
             illust
             for illust in illusts
             if not self._illust_blacklist_ids(illust).intersection(blacklisted)
-            and (allow_r18 or int(illust.get("x_restrict", 0) or 0) == 0)
+            and int(illust.get("x_restrict", 0) or 0) == 0
             and not self._matched_safety_term(illust, safety_terms)
         ]
 
