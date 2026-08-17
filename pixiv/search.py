@@ -283,13 +283,36 @@ class SearchMixin:
                 f"error_type={type(exc).__name__}"
             )
 
+    def _get_image_caption_provider_id(self) -> str:
+        """读取 AstrBot 配置的默认图片转述模型 provider_id。"""
+        try:
+            context_obj = getattr(self, "context", None)
+            if context_obj is None:
+                return ""
+            get_config = getattr(context_obj, "get_config", None)
+            if not callable(get_config):
+                return ""
+            cfg = get_config() or {}
+            return str(
+                (cfg.get("provider_settings") or {}).get(
+                    "default_image_caption_provider_id"
+                )
+                or ""
+            )
+        except Exception:
+            return ""
+
     async def _llm_generate_text(
         self,
         event: AstrMessageEvent,
         prompt: str,
         image_urls: list[str] | None = None,
     ) -> str:
-        """调用当前会话大模型生成文本；无可用的聊天模型或调用失败返回空串。"""
+        """调用大模型生成文本；无可用的模型或调用失败返回空串。
+
+        带图片（image_urls）时，优先使用 AstrBot 配置的「默认图片转述模型」，
+        避免会话的默认对话模型不支持多模态而失败；未配置则回退当前会话聊天模型。
+        """
         try:
             context_obj = getattr(self, "context", None)
             if context_obj is None:
@@ -301,6 +324,10 @@ class SearchMixin:
             provider_id = await get_provider(event.unified_msg_origin)
             if not provider_id:
                 return ""
+            if image_urls:
+                caption_provider_id = self._get_image_caption_provider_id()
+                if caption_provider_id:
+                    provider_id = caption_provider_id
             llm_resp = await llm_generate(
                 chat_provider_id=provider_id,
                 prompt=prompt,
@@ -310,21 +337,67 @@ class SearchMixin:
         except Exception:
             return ""
 
+    async def _record_reply(
+        self, event: AstrMessageEvent, user_text: str, reply_text: str
+    ) -> None:
+        """把插件提示/回复写入 AstrBot 对话历史，让大模型/AI 能看到。"""
+        if not self._cfg_bool("record_message_to_conversation", True):
+            return
+        try:
+            conversation_manager = getattr(self, "context", None)
+            if conversation_manager is None:
+                return
+            conv_mgr = getattr(conversation_manager, "conversation_manager", None)
+            if conv_mgr is None:
+                return
+            umo = event.unified_msg_origin
+            cid = await conv_mgr.get_curr_conversation_id(umo)
+            if not cid:
+                try:
+                    cid = await conv_mgr.new_conversation(umo)
+                except Exception:
+                    return
+            from astrbot.core.agent.message import (
+                AssistantMessageSegment,
+                TextPart,
+                UserMessageSegment,
+            )
+
+            await conv_mgr.add_message_pair(
+                cid=cid,
+                user_message=UserMessageSegment(content=[TextPart(text=user_text)]),
+                assistant_message=AssistantMessageSegment(
+                    content=[TextPart(text=reply_text)]
+                ),
+            )
+        except Exception:
+            return
+
     async def _reply(
-        self, event: AstrMessageEvent, fallback: str, context: str = ""
+        self,
+        event: AstrMessageEvent,
+        fallback: str,
+        context: str = "",
+        user_text: str = "",
+        record: bool = True,
     ) -> str:
-        """按当前会话大模型的人格改写回复；未开启或调用失败时返回默认文案。"""
-        if not self._cfg_bool("llm_natural_replies", True):
-            return fallback
-        prompt = (
-            "你是当前会话的机器人角色。下面是一条本应由插件输出的功能提示，"
-            "请用符合你人格设定的自然口语改写为一句（不超过 30 字），保留原意，"
-            "不要解释、引号、Markdown 或多余文字。\n"
-            f"提示：{fallback}\n"
-            f"背景：{context or '发图相关提示'}"
-        )
-        text = await self._llm_generate_text(event, prompt)
-        return text or fallback
+        """按当前会话大模型的人格改写回复；未开启或调用失败时返回默认文案。
+
+        开启记录时（record=True），改写后的回复会一并写入 AstrBot 对话历史。
+        """
+        text = fallback
+        if self._cfg_bool("llm_natural_replies", True):
+            prompt = (
+                "你是当前会话的机器人角色。下面是一条本应由插件输出的功能提示，"
+                "请用符合你人格设定的自然口语改写为一句（不超过 30 字），保留原意，"
+                "不要解释、引号、Markdown 或多余文字。\n"
+                f"提示：{fallback}\n"
+                f"背景：{context or '发图相关提示'}"
+            )
+            text = (await self._llm_generate_text(event, prompt)) or fallback
+        if record and user_text and text:
+            await self._record_reply(event, user_text, text)
+        return text
 
     async def _optimize_search_tag(self, event: AstrMessageEvent, tag: str) -> str:
         """让大模型优化/改写搜索标签（如翻译为日语）；失败返回空串。"""
@@ -448,7 +521,11 @@ class SearchMixin:
             )
             yield event.plain_result(
                 await self._reply(
-                    event, f"⏳ 请求太频繁，请 {wait} 秒后再试", "频率限制"
+                    event,
+                    f"⏳ 请求太频繁，请 {wait} 秒后再试",
+                    "频率限制",
+                    f"请求发图（标签：{tag or '随机'}，数量：{count_str or 1}）",
+                    record_conversation,
                 )
             )
             return
@@ -497,6 +574,8 @@ class SearchMixin:
                     event,
                     self._search_failure_message(reason),
                     f"标签：{search_tag or '随机'}",
+                    f"请求发图（标签：{tag or '随机'}，数量：{count}）",
+                    record_conversation,
                 )
             )
             return
@@ -518,7 +597,13 @@ class SearchMixin:
                 await self.image_index.set_retention_days(dedupe_days)
             except Exception:
                 yield event.plain_result(
-                    await self._reply(event, "图片去重索引更新失败，请稍后重试", "去重索引")
+                    await self._reply(
+                        event,
+                        "图片去重索引更新失败，请稍后重试",
+                        "去重索引",
+                        f"请求发图（标签：{tag or '随机'}，数量：{count}）",
+                        record_conversation,
+                    )
                 )
                 return
 
@@ -536,6 +621,8 @@ class SearchMixin:
                     event,
                     "当前去重范围内没有未发送过的图片了，换个标签或稍后再试",
                     "发图去重",
+                    f"请求发图（标签：{tag or '随机'}，数量：{count}）",
+                    record_conversation,
                 )
             )
             return
@@ -586,7 +673,11 @@ class SearchMixin:
             if not downloaded:
                 yield event.plain_result(
                     await self._reply(
-                        event, "😢 所有图片均下载失败，请稍后再试", "图片下载"
+                        event,
+                        "😢 所有图片均下载失败，请稍后再试",
+                        "图片下载",
+                        f"请求发图（标签：{tag or '随机'}，数量：{count}）",
+                        record_conversation,
                     )
                 )
                 return

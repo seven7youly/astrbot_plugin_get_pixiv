@@ -26,6 +26,7 @@
       <nav class="workspace-nav" aria-label="功能模块导航">
         <button class="active" data-view="safety" type="button">内容安全</button>
         <button data-view="config" type="button">插件配置</button>
+        <button data-view="llm" type="button">大语言模型（LLM）</button>
       </nav>
 
       <main>
@@ -84,9 +85,26 @@
               <button id="configSaveBtn" class="primary-btn" type="button">保存配置</button>
             </div>
             <p id="configNotice" class="config-notice">
-              所有配置已集中在此管理。修改图片源地址、Token 或反代地址后需在 AstrBot 中重载插件才能生效。
+              基础配置集中在此管理（LLM 相关设置在「大语言模型（LLM）」标签）。修改图片源地址、Token 或反代地址后需在 AstrBot 中重载插件才能生效。
             </p>
             <div id="configForm" class="config-form" aria-live="polite"></div>
+          </section>
+        </section>
+
+        <!-- 大语言模型（LLM） -->
+        <section id="llmView" class="workspace" aria-labelledby="llmTitle">
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <p>LLM INTEGRATION</p>
+                <h2 id="llmTitle">大语言模型（LLM）</h2>
+              </div>
+              <button id="llmConfigSaveBtn" class="primary-btn" type="button">保存配置</button>
+            </div>
+            <p class="config-notice">
+              以下功能均需 AstrBot 配置可用的聊天大模型；图片描述会优先使用 AstrBot 的「默认图片转述模型」。
+            </p>
+            <div id="llmConfigForm" class="config-form" aria-live="polite"></div>
           </section>
         </section>
       </main>

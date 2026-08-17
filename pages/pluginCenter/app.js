@@ -27,6 +27,8 @@ const els = {
   r18Toggle: $("r18Toggle"),
   configForm: $("configForm"),
   configSaveBtn: $("configSaveBtn"),
+  llmConfigForm: $("llmConfigForm"),
+  llmConfigSaveBtn: $("llmConfigSaveBtn"),
   toast: $("toast"),
 };
 
@@ -271,35 +273,27 @@ function renderConfigField(key, meta) {
     </div>`;
 }
 
-function renderConfigForm() {
+function renderConfigGroup(container, group) {
   const schema = state.configSchema || {};
-  const keys = Object.keys(schema);
+  const keys = Object.keys(schema).filter((key) => (schema[key]?.group || "basic") === group);
   if (!keys.length) {
-    els.configForm.innerHTML = '<div class="empty">配置加载失败，请点击上方“重新加载”。</div>';
+    container.innerHTML = '<div class="empty">暂无配置项</div>';
     return;
   }
-  const groups = {};
-  keys.forEach((key) => {
-    const group = schema[key]?.group || "basic";
-    (groups[group] = groups[group] || []).push(key);
-  });
-  const groupLabels = { basic: "基础配置", llm: "大语言模型（LLM）" };
-
-  els.configForm.innerHTML = Object.entries(groups).map(([group, groupKeys]) => `
+  container.innerHTML = `
     <div class="config-group full">
-      <h3 class="config-group-title">${escapeHtml(groupLabels[group] || group)}</h3>
       <div class="config-group-grid">
-        ${groupKeys.map((key) => renderConfigField(key, schema[key] || {})).join("")}
+        ${keys.map((key) => renderConfigField(key, schema[key] || {})).join("")}
       </div>
     </div>
-  `).join("");
+  `;
 
   // 布尔开关
-  els.configForm.querySelectorAll(".toggle-switch").forEach((button) => {
+  container.querySelectorAll(".toggle-switch").forEach((button) => {
     button.addEventListener("click", () => toggleConfigBool(button));
   });
   // 数值/文本输入
-  els.configForm.querySelectorAll("input[data-key], select[data-key], textarea[data-key]").forEach((input) => {
+  container.querySelectorAll("input[data-key], select[data-key], textarea[data-key]").forEach((input) => {
     const key = input.dataset.key;
     const meta = schema[key] || {};
     const sync = () => {
@@ -312,6 +306,17 @@ function renderConfigForm() {
     input.addEventListener("input", sync);
     input.addEventListener("change", sync);
   });
+}
+
+function renderConfigForm() {
+  const schema = state.configSchema || {};
+  if (!Object.keys(schema).length) {
+    els.configForm.innerHTML = '<div class="empty">配置加载失败，请点击上方“重新加载”。</div>';
+    els.llmConfigForm.innerHTML = '<div class="empty">配置加载失败，请点击上方“重新加载”。</div>';
+    return;
+  }
+  renderConfigGroup(els.configForm, "basic");
+  renderConfigGroup(els.llmConfigForm, "llm");
 }
 
 async function loadConfig() {
@@ -328,8 +333,9 @@ async function loadConfig() {
   }
 }
 
-async function saveConfig() {
-  setButtonBusy(els.configSaveBtn, true, "保存中…", "保存配置");
+async function saveConfig(button) {
+  const btn = button || els.configSaveBtn;
+  setButtonBusy(btn, true, "保存中…", "保存配置");
   try {
     const result = await apiPost("config", { config: state.config });
     showToast("插件配置已保存");
@@ -339,7 +345,7 @@ async function saveConfig() {
   } catch (error) {
     showToast(error.message || "保存失败", "error");
   } finally {
-    setButtonBusy(els.configSaveBtn, false, "保存中…", "保存配置");
+    setButtonBusy(btn, false, "保存中…", "保存配置");
   }
 }
 
@@ -349,7 +355,8 @@ function bindEvents() {
   });
   els.builtinSearch.addEventListener("input", renderSafety);
   els.r18Toggle.addEventListener("click", toggleR18);
-  els.configSaveBtn.addEventListener("click", saveConfig);
+  els.configSaveBtn.addEventListener("click", () => saveConfig(els.configSaveBtn));
+  els.llmConfigSaveBtn.addEventListener("click", () => saveConfig(els.llmConfigSaveBtn));
   els.retryBtn.addEventListener("click", async () => {
     try {
       await Promise.allSettled([loadSafety(), loadConfig()]);
@@ -385,8 +392,8 @@ async function start() {
   }
   await bridge.ready();
   bindEvents();
-  const initialView = location.hash.slice(1) === "config" ? "config" : "safety";
-  switchView(initialView);
+  const hash = location.hash.slice(1);
+  switchView(["safety", "config", "llm"].includes(hash) ? hash : "safety");
   try {
     await Promise.allSettled([loadSafety(), loadConfig()]);
   } catch { /* handled inside loaders */ }
