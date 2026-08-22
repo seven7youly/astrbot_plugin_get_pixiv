@@ -22,7 +22,6 @@
 
 import asyncio
 from pathlib import Path
-import re
 import time
 
 from astrbot.api.all import AstrBotConfig, logger
@@ -30,7 +29,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.command import GreedyStr
 from astrbot.core.star.star_tools import StarTools
-from .pixiv import DeliveryMixin, FiltersMixin, SearchMixin
+from .pixiv import FiltersMixin, SearchMixin
 from .pixiv.client import PixivClient
 from .pixiv.constants import MAX_IMAGE_COUNT
 from .pixiv.downloader import ImageDownloader
@@ -46,32 +45,15 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v2.1.0"
+PLUGIN_VERSION = "v2.2.0Beta"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
-
-AUTO_TRIGGER_PATTERN = r"^/?(来\s*(.*?)(份|个|张|点))(.*?)(福利|色|瑟|涩|塞)?图$"
-
-
-CHINESE_NUMBER_MAP = {
-    "一": "1",
-    "二": "2",
-    "两": "2",
-    "三": "3",
-    "四": "4",
-    "五": "5",
-    "六": "6",
-    "七": "7",
-    "八": "8",
-    "九": "9",
-    "十": "10",
-}
 
 # ──────────────────────────────────────────────────────────────────────
 # 插件主类
 # ──────────────────────────────────────────────────────────────────────
 
 
-class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
+class GetPxPlugin(SearchMixin, FiltersMixin, LlmMixin, Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context, config)
         self.config = config
@@ -110,6 +92,8 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
         await self.image_index.cleanup_old_days(trigger="startup")
         self.plugin_web_api.register()
         logger.info(f"{LOG_PREFIX} 插件已加载: version={PLUGIN_VERSION}")
+        # 临时诊断：后台检测 Pixiv refresh_token 可用性
+        asyncio.create_task(self._check_pixiv_token())
 
     def _init_client(self):
         """初始化 Lolicon 主源和可选的 Pixiv 回退客户端。"""
@@ -134,6 +118,23 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
             request_timeout=self._cfg_float("request_timeout", 30.0, 5.0, 120.0),
         )
         logger.info(f"{LOG_PREFIX} Lolicon 主源和 Pixiv 回退客户端已初始化")
+
+    async def _check_pixiv_token(self) -> None:
+        """临时诊断：验证 Pixiv refresh_token 是否可用（尝试登录并记录结果）。"""
+        client = getattr(self, "client", None)
+        if client is None:
+            logger.info(f"{LOG_PREFIX} [Pixiv检测] 未配置 refresh_token，跳过检测")
+            return
+        try:
+            await client.ensure_logged_in()
+            logger.info(
+                f"{LOG_PREFIX} [Pixiv检测] refresh_token 可用，Pixiv 登录成功"
+            )
+        except Exception as exc:
+            logger.warning(
+                f"{LOG_PREFIX} [Pixiv检测] refresh_token 不可用: "
+                f"error_type={type(exc).__name__} error={exc}"
+            )
 
     async def terminate(self):
         """插件卸载/停用时清理资源，并让并发调用等待同一清理任务。"""
@@ -281,46 +282,6 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
         )
         return "\n".join(lines)
 
-    @filter.regex(AUTO_TRIGGER_PATTERN)
-    async def auto_trigger(self, event: AstrMessageEvent):
-        """自然语言自动触发发图。"""
-        if not self._cfg_bool("auto_trigger_enabled", True):
-            return
-        if not self._ensure_client_or_error(event):
-            return
-
-        message = event.get_message_str().strip()
-        match = re.match(AUTO_TRIGGER_PATTERN, message)
-        if not match:
-            return
-
-        event.stop_event()
-
-        count_part = match.group(2).strip() if match.group(2) else ""
-        tag_part = (match.group(4) or "").strip()
-
-        # 解析数量：中文数字、阿拉伯数字
-        count_str = ""
-        raw = count_part if count_part else "1"
-        if raw.isdigit():
-            count_str = raw
-        else:
-            for cn_digit, arabic in CHINESE_NUMBER_MAP.items():
-                if raw == cn_digit:
-                    count_str = arabic
-                    break
-            if not count_str:
-                count_str = "1"
-
-        logger.info(
-            f"{LOG_PREFIX} 自然语言触发: count={count_str} "
-            f"tag_configured={'yes' if tag_part else 'no'}"
-        )
-        async for result in self._handle_search(
-            event, tag=tag_part, count_str=count_str
-        ):
-            yield result
-
     # ──────────────────────────────────────────────────────────────
     # LLM 工具：让 AstrBot 大模型在对话中以自然语言调用发图
     # ──────────────────────────────────────────────────────────────
@@ -335,8 +296,8 @@ class GetPxPlugin(SearchMixin, DeliveryMixin, FiltersMixin, LlmMixin, Star):
         """搜索并发送插画图片给用户。
 
         Args:
-            tag(string): 插画搜索标签，例如"初音ミク"；可为空字符串表示随机取图
-            count(string): 要发送的图片数量（1-5），例如"3"
+            tag(string): 插画搜索标签，例如"初音未来"；可为空字符串表示随机取图
+            count(string): 要发送的图片数量（1-5）。用户未明确说明数量时必须填"1"
         """
         if not self._cfg_bool("auto_trigger_enabled", True):
             yield event.plain_result("⚠️ 自然语言发图已关闭，请在插件配置中打开 auto_trigger_enabled")

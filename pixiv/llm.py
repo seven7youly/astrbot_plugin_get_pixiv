@@ -217,8 +217,8 @@ class LlmMixin:
         """产出状态回复（async generator）。
 
         命令路径（push=True）推送给 AstrBot 主 Agent 按人格自然回复；工具路径（push=False）
-        直接返回默认文案，由其工具结果交回外层 Agent 按人格自然回应（避免在 Agent 内部
-        嵌套再跑 Agent）。两条路径都会确保回复写入对话历史（受 record_message_to_conversation 控制）。
+        直接返回默认文案，由其工具结果交回外层 Agent 按人格自然回应。
+        两条路径都会确保回复写入对话历史。
         """
         if push and self._cfg_bool("llm_natural_replies", True):
             note = fallback
@@ -255,24 +255,59 @@ class LlmMixin:
         tag: str,
         downloaded: list[tuple[dict, str, str, int]],
     ) -> str:
-        """调用多模态大模型查看已发送图片，返回绑定搜索标签的内容描述。"""
+        """步骤6）LLM 识图：结合对话上下文与图片标题/全部标签生成内容描述。
+
+        首先请求 AstrBot 默认对话模型（携带最近对话历史，让 LLM 结合上下文
+        自主决定描述方式）；若默认对话模型不支持看图则回退「默认图片转述模型」。
+        图片直接复用发图下载的临时文件，不新增磁盘占用。
+        """
         image_paths = [path for _illust, path, _q, _s in downloaded if path]
         if not image_paths:
             return ""
-        base_prompt = self._cfg_str(
-            "llm_describe_prompt",
-            "Please briefly describe the content and atmosphere of this image. If there are people in the image, please describe their actions, expressions, postures, clothing, and facial expressions in detail.",
+        titles = [
+            str(illust.get("title") or "").strip()
+            for illust, *_rest in downloaded
+            if str(illust.get("title") or "").strip()
+        ]
+        all_tags: list[str] = []
+        for illust, *_rest in downloaded:
+            for t in illust.get("tags") or []:
+                name = t.get("name") if isinstance(t, dict) else str(t)
+                if name and name not in all_tags:
+                    all_tags.append(str(name))
+        title_text = "、".join(titles) or "无标题"
+        tag_text = "、".join(all_tags) or "无"
+
+        prompt = (
+            f"刚刚向用户发送了 {len(image_paths)} 张插画图片。\n"
+            f"作品标题：{title_text}\n"
+            f"作品标签：{tag_text}\n"
+            "请结合以上信息与当前对话上下文，用一段话自然地描述这些图片的内容"
+            "（如有人物请描述其动作、表情、姿势、服饰与面部表情）。"
         )
-        tag_clean = str(tag or "").strip()
-        if tag_clean:
-            prompt = (
-                f"{base_prompt}\n"
-                f"这些图片是用户按标签「{tag_clean}」搜索并发送的插画，"
-                f"请结合该标签客观描述图片内容，并判断图片是否与标签相符。"
-            )
-        else:
-            prompt = base_prompt
-        text = await self._llm_generate_text(event, prompt, image_urls=image_paths)
+
+        # 首选：默认对话模型 + 最近对话上下文
+        text = await self._llm_generate_with_context(event, prompt, image_paths)
+        if not text:
+            # 回退：默认图片转述模型（仅看图）
+            caption_provider_id = self._get_image_caption_provider_id()
+            if caption_provider_id:
+                try:
+                    ctx = getattr(self, "context", None)
+                    prov = (
+                        ctx.get_provider_by_id(caption_provider_id)
+                        if ctx is not None and hasattr(ctx, "get_provider_by_id")
+                        else None
+                    )
+                    if prov is not None:
+                        llm_resp = await prov.text_chat(
+                            prompt=prompt, image_urls=image_paths
+                        )
+                        text = (
+                            getattr(llm_resp, "completion_text", "") or ""
+                        ).strip()
+                except Exception:
+                    text = ""
         if not text:
             logger.warning(
                 f"{LOG_PREFIX} 大模型未返回图片描述，请确认所用模型支持图片输入（多模态）"
@@ -280,7 +315,55 @@ class LlmMixin:
             return ""
         logger.info(
             f"{LOG_PREFIX} 大模型已查看图片: image_count={len(image_paths)} "
-            f"tag_configured={'yes' if tag_clean else 'no'} "
             f"description_len={len(text)}"
         )
         return text
+
+    async def _llm_generate_with_context(
+        self,
+        event: AstrMessageEvent,
+        prompt: str,
+        image_urls: list[str] | None = None,
+    ) -> str:
+        """调用当前会话的默认对话模型（携带最近对话历史）生成文本。
+
+        让 LLM 结合上下文自主组织回复。模型不支持看图或调用失败时返回空串，
+        由调用方决定是否回退到「默认图片转述模型」。
+        """
+        try:
+            ctx = getattr(self, "context", None)
+            if ctx is None:
+                return ""
+            llm_generate = getattr(ctx, "llm_generate", None)
+            get_provider = getattr(ctx, "get_current_chat_provider_id", None)
+            conv_mgr = getattr(ctx, "conversation_manager", None)
+            if llm_generate is None or get_provider is None:
+                return ""
+            provider_id = await get_provider(event.unified_msg_origin)
+            if not provider_id:
+                return ""
+
+            contexts = []
+            if conv_mgr is not None:
+                try:
+                    umo = event.unified_msg_origin
+                    cid = await conv_mgr.get_curr_conversation_id(umo)
+                    if cid:
+                        conversation = await conv_mgr.get_conversation(umo, cid)
+                        if conversation and conversation.history:
+                            contexts = json.loads(conversation.history)
+                except Exception:
+                    contexts = []
+
+            llm_resp = await llm_generate(
+                chat_provider_id=provider_id,
+                prompt=prompt,
+                image_urls=image_urls or None,
+                contexts=contexts or None,
+            )
+            return (getattr(llm_resp, "completion_text", "") or "").strip()
+        except Exception as exc:
+            logger.debug(
+                f"{LOG_PREFIX} 默认对话模型识图失败: error_type={type(exc).__name__}"
+            )
+            return ""

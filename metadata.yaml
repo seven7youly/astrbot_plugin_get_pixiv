@@ -2,7 +2,7 @@ name: astrbot_plugin_get_pixiv
 display_name: 星绘漫游
 short_desc: 通过插件获取pixiv图片，并且使机器人可以看到发送的图片
 desc: 通过 Lolicon 标签搜索或随机获取插画（仅普通分级；内置安全词支持逐词锁定，可用 /pv 安全词 查看），失败时可用 Pixiv refresh_token 回退到搜索或推荐作品。支持内容安全过滤、发图去重、请求频率限制和自然语言自动触发。大幅提升插件AI能力，使上下文更连贯。
-version: v2.1.0
+version: v2.2.0Beta
 author: seven7youly
 repo: https://github.com/seven7youly/astrbot_plugin_get_pixiv
 astrbot_version: ">=4.16"

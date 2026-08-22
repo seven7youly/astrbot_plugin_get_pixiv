@@ -45,6 +45,44 @@ class FiltersMixin:
                 return matched
         return ""
 
+    # ── 可复用内容安全检查模块 ──────────────────────────────────
+
+    async def _check_tag_safety(self, tag: str) -> bool:
+        """标签安全检查：命中内置/自定义安全词返回 False，通过返回 True。"""
+        try:
+            return not (tag and await self._blocked_query_term(tag))
+        except RuntimeError:
+            return False
+
+    async def _check_illust_safety(self, illust: dict) -> bool:
+        """图片信息安全检查：标题 + 所有标签 + 年龄分级全部通过才返回 True。"""
+        if int(illust.get("x_restrict", 0) or 0) != 0:
+            return False
+        try:
+            terms = await self._safety_terms()
+        except RuntimeError:
+            return False
+        return not self._matched_safety_term(illust, terms)
+
+    async def _check_illust_blacklist_and_safety(self, illusts: list[dict]) -> list[dict]:
+        """批量过滤：作品黑名单 + 全信息安全检查。"""
+        if not illusts:
+            return illusts
+        blacklisted: set[str] = set()
+        try:
+            if self.image_index is not None:
+                blacklisted = await self.image_index.get_blacklisted_illust_ids()
+        except Exception as exc:
+            logger.error(f"{LOG_PREFIX} 读取图片黑名单失败: {type(exc).__name__}")
+            raise RuntimeError("内容安全服务暂不可用") from exc
+        result = []
+        for illust in illusts:
+            if self._illust_blacklist_ids(illust).intersection(blacklisted):
+                continue
+            if await self._check_illust_safety(illust):
+                result.append(illust)
+        return result
+
     @staticmethod
     def _illust_blacklist_ids(illust: dict, illust_id: str = "") -> set[str]:
         return {
@@ -61,25 +99,6 @@ class FiltersMixin:
     def _filter_manga(illusts: list[dict]) -> list[dict]:
         """Filter out every Pixiv manga item."""
         return [il for il in illusts if il.get("type") != "manga"]
-
-    async def _filter_blacklisted_illusts(self, illusts: list[dict]) -> list[dict]:
-        if not illusts:
-            return illusts
-        safety_terms = await self._safety_terms()
-        blacklisted: set[str] = set()
-        try:
-            if self.image_index is not None:
-                blacklisted = await self.image_index.get_blacklisted_illust_ids()
-        except Exception as exc:
-            logger.error(f"{LOG_PREFIX} 读取图片黑名单失败: {type(exc).__name__}")
-            raise RuntimeError("内容安全服务暂不可用") from exc
-        return [
-            illust
-            for illust in illusts
-            if not self._illust_blacklist_ids(illust).intersection(blacklisted)
-            and int(illust.get("x_restrict", 0) or 0) == 0
-            and not self._matched_safety_term(illust, safety_terms)
-        ]
 
     async def _pick_illusts(
         self,
