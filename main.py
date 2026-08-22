@@ -92,8 +92,6 @@ class GetPxPlugin(SearchMixin, FiltersMixin, LlmMixin, Star):
         await self.image_index.cleanup_old_days(trigger="startup")
         self.plugin_web_api.register()
         logger.info(f"{LOG_PREFIX} 插件已加载: version={PLUGIN_VERSION}")
-        # 临时诊断：后台检测 Pixiv refresh_token 可用性
-        asyncio.create_task(self._check_pixiv_token())
 
     def _init_client(self):
         """初始化 Lolicon 主源和可选的 Pixiv 回退客户端。"""
@@ -118,23 +116,6 @@ class GetPxPlugin(SearchMixin, FiltersMixin, LlmMixin, Star):
             request_timeout=self._cfg_float("request_timeout", 30.0, 5.0, 120.0),
         )
         logger.info(f"{LOG_PREFIX} Lolicon 主源和 Pixiv 回退客户端已初始化")
-
-    async def _check_pixiv_token(self) -> None:
-        """临时诊断：验证 Pixiv refresh_token 是否可用（尝试登录并记录结果）。"""
-        client = getattr(self, "client", None)
-        if client is None:
-            logger.info(f"{LOG_PREFIX} [Pixiv检测] 未配置 refresh_token，跳过检测")
-            return
-        try:
-            await client.ensure_logged_in()
-            logger.info(
-                f"{LOG_PREFIX} [Pixiv检测] refresh_token 可用，Pixiv 登录成功"
-            )
-        except Exception as exc:
-            logger.warning(
-                f"{LOG_PREFIX} [Pixiv检测] refresh_token 不可用: "
-                f"error_type={type(exc).__name__} error={exc}"
-            )
 
     async def terminate(self):
         """插件卸载/停用时清理资源，并让并发调用等待同一清理任务。"""

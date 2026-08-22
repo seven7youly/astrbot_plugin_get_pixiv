@@ -102,6 +102,23 @@ class LlmMixin:
         except Exception:
             return
 
+    @staticmethod
+    def _illust_summary(illust: dict) -> str:
+        """提取单张图片的关键信息（标题 + 全部标签含翻译名）。"""
+        title = str(illust.get("title") or "").strip() or "无标题"
+        tags = []
+        for t in illust.get("tags") or []:
+            if isinstance(t, dict):
+                name = str(t.get("name") or "").strip()
+                translated = str(t.get("translated_name") or "").strip()
+                tag_str = f"{name}({translated})" if translated else name
+            else:
+                tag_str = str(t)
+            if tag_str:
+                tags.append(tag_str)
+        tags_text = "、".join(tags) or "无标签"
+        return f"「{title}」（标签：{tags_text}）"
+
     async def _record_conversation(
         self,
         event: AstrMessageEvent,
@@ -111,11 +128,14 @@ class LlmMixin:
         downloaded: list[tuple[dict, str, str, int]],
         description: str = "",
     ) -> None:
-        """把本次发图结果（含图片描述）写入 AstrBot 对话历史。"""
+        """把本次发图结果（含每张图片的标题/全部标签与描述）写入 AstrBot 对话历史。"""
         user_text = f"请求发图（标签：{tag or '随机'}，数量：{count}）"
         sent_ids = sorted(sent_illust_ids)
+        summaries = "；".join(
+            self._illust_summary(illust) for illust, *_rest in downloaded
+        )
         assistant_text = (
-            f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）"
+            f"已发送 {len(sent_ids)} 张图片（ID：{', '.join(sent_ids) or '-'}）：{summaries}"
         )
         if description:
             assistant_text += f"\n图片内容描述：{description}"
@@ -266,14 +286,20 @@ class LlmMixin:
         if not image_paths:
             return ""
 
-        # 汇总每张图片的完整元信息（标题、全部标签、作者、尺寸、ID 等）
+        # 汇总每张图片的完整元信息（标题、全部标签含翻译、作者、尺寸、ID 等）
         illust_infos: list[str] = []
         for idx, (illust, *_rest) in enumerate(downloaded, 1):
-            tags = [
-                t.get("name") if isinstance(t, dict) else str(t)
-                for t in (illust.get("tags") or [])
-            ]
-            tags_text = "、".join(str(t) for t in tags if t) or "无"
+            tags = []
+            for t in illust.get("tags") or []:
+                if isinstance(t, dict):
+                    name = str(t.get("name") or "").strip()
+                    translated = str(t.get("translated_name") or "").strip()
+                    tag_str = f"{name}({translated})" if translated else name
+                else:
+                    tag_str = str(t)
+                if tag_str:
+                    tags.append(tag_str)
+            tags_text = "、".join(tags) or "无"
             info_parts = [
                 f"  图片{idx}：",
                 f"  标题：{illust.get('title') or '无标题'}",
