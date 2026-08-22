@@ -45,7 +45,7 @@ from .plugin_api import PluginWebApi
 
 LOG_PREFIX = "[GetPx]"
 PLUGIN_NAME = "astrbot_plugin_get_pixiv"
-PLUGIN_VERSION = "v2.2.0Beta"
+PLUGIN_VERSION = "v2.2.0Beta2"
 WEB_INTERNAL_ERROR_MESSAGE = "服务内部错误，请稍后重试"
 
 # ──────────────────────────────────────────────────────────────────────
