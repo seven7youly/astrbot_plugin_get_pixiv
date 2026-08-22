@@ -240,7 +240,7 @@ class SearchMixin:
                     continue
 
             try:
-                illusts = await self._filter_blacklisted_illusts(illusts)
+                illusts = await self._check_illust_blacklist_and_safety(illusts)
             except RuntimeError:
                 return [], "", 0, current_tag, "safety_error"
             if not illusts:
