@@ -116,6 +116,7 @@ CONFIG_META: dict[str, dict] = {
         "type": "text",
         "default": "Please briefly describe the content and atmosphere of this image. If there are people in the image, please describe their actions, expressions, postures, clothing, and facial expressions in detail.",
         "group": "llm",
+        "hint": "发送给回退转述模型的基础提示词（默认对话模型会自动结合上下文与图片元信息描述）。发图时插件会自动附带图片完整元信息。",
     },
     "llm_search_tag_retries": {
         "label": "无结果时更换标签次数",

@@ -255,35 +255,46 @@ class LlmMixin:
         tag: str,
         downloaded: list[tuple[dict, str, str, int]],
     ) -> str:
-        """步骤6）LLM 识图：结合对话上下文与图片标题/全部标签生成内容描述。
+        """步骤6）LLM 识图：结合对话上下文与图片完整信息生成内容描述。
 
-        首先请求 AstrBot 默认对话模型（携带最近对话历史，让 LLM 结合上下文
-        自主决定描述方式）；若默认对话模型不支持看图则回退「默认图片转述模型」。
-        图片直接复用发图下载的临时文件，不新增磁盘占用。
+        首先请求 AstrBot 默认对话模型（携带最近对话历史 + 图片完整元信息，
+        让 LLM 结合上下文自主决定描述方式）；若默认对话模型不支持看图
+        则回退「默认图片转述模型」。图片直接复用发图下载的临时文件，
+        不新增磁盘占用。
         """
         image_paths = [path for _illust, path, _q, _s in downloaded if path]
         if not image_paths:
             return ""
-        titles = [
-            str(illust.get("title") or "").strip()
-            for illust, *_rest in downloaded
-            if str(illust.get("title") or "").strip()
-        ]
-        all_tags: list[str] = []
-        for illust, *_rest in downloaded:
-            for t in illust.get("tags") or []:
-                name = t.get("name") if isinstance(t, dict) else str(t)
-                if name and name not in all_tags:
-                    all_tags.append(str(name))
-        title_text = "、".join(titles) or "无标题"
-        tag_text = "、".join(all_tags) or "无"
+
+        # 汇总每张图片的完整元信息（标题、全部标签、作者、尺寸、ID 等）
+        illust_infos: list[str] = []
+        for idx, (illust, *_rest) in enumerate(downloaded, 1):
+            tags = [
+                t.get("name") if isinstance(t, dict) else str(t)
+                for t in (illust.get("tags") or [])
+            ]
+            tags_text = "、".join(str(t) for t in tags if t) or "无"
+            info_parts = [
+                f"  图片{idx}：",
+                f"  标题：{illust.get('title') or '无标题'}",
+                f"  作者：{(illust.get('user') or {}).get('name') or '未知'}",
+                f"  标签：{tags_text}",
+                f"  作品ID：{illust.get('id') or '未知'}",
+            ]
+            width = illust.get("width")
+            height = illust.get("height")
+            if width and height:
+                info_parts.append(f"  尺寸：{width}x{height}")
+            if illust.get("ai_type"):
+                info_parts.append("  AI 生成作品")
+            illust_infos.append("\n".join(info_parts))
+        info_text = "\n".join(illust_infos)
 
         prompt = (
-            f"刚刚向用户发送了 {len(image_paths)} 张插画图片。\n"
-            f"作品标题：{title_text}\n"
-            f"作品标签：{tag_text}\n"
+            f"刚刚向用户发送了 {len(image_paths)} 张插画图片，以下是这些图片的完整信息：\n"
+            f"{info_text}\n\n"
             "请结合以上信息与当前对话上下文，用一段话自然地描述这些图片的内容"
-            "（如有人物请描述其动作、表情、姿势、服饰与面部表情）。"
+            "（如有人物请描述其动作、表情、姿势、服饰与面部表情），并决定如何向用户呈现。"
         )
 
         # 首选：默认对话模型 + 最近对话上下文

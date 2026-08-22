@@ -106,12 +106,8 @@ class SearchMixin:
                     source_key = "lolicon:random"
                 if illusts:
                     return illusts, len(illusts), source_key
-            except Exception as exc:
-                logger.info(
-                    f"{LOG_PREFIX} Lolicon 请求失败，尝试 Pixiv 回退: "
-                    f"tag_configured={'yes' if tag else 'no'} "
-                    f"error_type={type(exc).__name__}"
-                )
+            except Exception:
+                pass
 
         pixiv_source_key = (
             self._source_key(tag, "pixiv") if tag else "pixiv:recommended"
@@ -122,11 +118,8 @@ class SearchMixin:
                 page_offset = await self.image_index.get_page_offset(
                     self._event_scope(event), pixiv_source_key
                 )
-            except Exception as exc:
-                logger.warning(
-                    f"{LOG_PREFIX} 读取 Pixiv 回退分页游标失败: "
-                    f"error_type={type(exc).__name__}"
-                )
+            except Exception:
+                pass
 
         if self.client is None:
             self._init_client()
@@ -139,13 +132,8 @@ class SearchMixin:
             else:
                 illusts = await self.client.recommended(offset=page_offset)
                 source_key = pixiv_source_key
-        except Exception as exc:
-            logger.warning(
-                f"{LOG_PREFIX} Pixiv 回退请求失败: "
-                f"tag_configured={'yes' if tag else 'no'} "
-                f"error_type={type(exc).__name__}"
-            )
-            return [], 0, pixiv_source_key
+        except Exception:
+            pass
         return illusts, len(illusts), source_key
 
     @staticmethod

@@ -142,7 +142,7 @@
     "type": "text",
     "default": "Please briefly describe the content and atmosphere of this image. If there are people in the image, please describe their actions, expressions, postures, clothing, and facial expressions in detail.",
     "obvious_hint": true,
-    "hint": "llm_describe_images 开启时，发送给多模态大模型的查看图片基础提示词。当发图带搜索标签时，会自动在该提示词后追加「图片由标签搜索获得，请结合标签客观描述并判断是否相符」的说明，让描述绑定标签、更客观。"
+    "hint": "llm_describe_images 开启时，发送给回退转述模型的基础提示词（默认对话模型会自动结合上下文与图片元信息描述）。发图时插件会自动附带图片的标题、全部标签、作者、尺寸等完整元信息。"
   },
   "llm_search_tag_retries": {
     "description": "自然语言无结果时更换标签次数",
